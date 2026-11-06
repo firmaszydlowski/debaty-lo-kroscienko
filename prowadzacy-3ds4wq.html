@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="pl">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Debaty, prowadzący</title>
+<title>Debates, moderator</title>
 <style>
 /* Wspólne dla tabletu prowadzącego i telefonów. Kolory jak w materiałach Erasmus+ tej realizacji. */
 :root {
@@ -64,6 +64,8 @@ li + li { margin-top: 8px; }
 .komunikat.uwaga { border-color: #FEC84B; background: var(--uwaga-tint); }
 .komunikat.ok { border-color: #A6F4C5; background: var(--tak-tint); }
 
+.baner-testu { background: var(--uwaga); color: #fff; font-weight: 700; text-align: center; padding: var(--s1) var(--s2); letter-spacing: .02em; }
+
 .ekrany { display: flex; gap: 8px; flex-wrap: wrap; }
 .ekrany button { min-height: 44px; padding: 8px 16px; border: 1px solid #fff; background: transparent; color: #fff; font-weight: 700; }
 .ekrany button[aria-pressed="true"] { background: #fff; color: var(--eu-blue); }
@@ -112,17 +114,17 @@ main.glosowanie-pierwsze #timer { order: 2; }
 </head>
 <body>
 <div class="pasek">
-  <b>Debaty · prowadzący</b>
-  <nav class="ekrany" id="ekrany" aria-label="Część zajęć"></nav>
+  <b>Debates · moderator</b>
+  <nav class="ekrany" id="ekrany" aria-label="Part of the session"></nav>
   <span class="obecni" id="obecni"></span>
-  <span class="lacze" id="lacze">łączenie…</span>
+  <span class="lacze" id="lacze">connecting…</span>
 </div>
 <div class="uklad">
   <main>
     <div class="fazy" id="fazy" role="list"></div>
     <article class="karta faza" id="faza"></article>
     <section class="karta timer" id="timer" aria-label="Timer"></section>
-    <section class="karta" id="glosowanie" aria-label="Głosowanie"></section>
+    <section class="karta" id="glosowanie" aria-label="Vote"></section>
   </main>
   <aside class="prawa karta">
     <div class="zakladki" role="tablist" id="zakladki"></div>
@@ -142,34 +144,36 @@ main.glosowanie-pierwsze #timer { order: 2; }
 */
 
 ;
-/* Treść debat: pytania, przebieg, ściąga prowadzącego. Źródło: _backoffice/debaty/prowadzacy.html i otwarcie-en.html. */
+/* Debate content: motions, flow, moderator cheat sheet. Source: _backoffice/debaty/prowadzacy.html and otwarcie-en.html. */
 const OCZEKIWANYCH_GLOSOW = 21;
 const DROPBOX_SZKOLY = "https://www.dropbox.com/request/lokqj4xooz6lls3qf7wf";
+/* Test runs upload outside the school folder. Filled in by zbuduj.py. */
+const DROPBOX_TESTOWY = "";
 
 const FAZY_DEBATY = [
-  { id: "otwarcie", nazwa: "Otwarcie i pierwsze głosowanie", czas: 120, kto: null, glosowanie: "przed",
-    opis: "Podajesz numer debaty i czytasz pytanie. Otwierasz głosowanie, zamykasz, zapisujesz wynik.",
+  { id: "otwarcie", nazwa: "Opening and first vote", czas: 120, kto: null, glosowanie: "przed",
+    opis: "Give the debate number and read the motion. Open the vote, close it, save the result.",
     mowisz: "Before we start, let's vote on your phones. Speakers don't vote. Vote for what you really think, not for your team. Voting is open now. … Thank you, voting is closed. Yes: …, no: …." },
-  { id: "tak1", nazwa: "Pierwszy mówca TAK", czas: 120, kto: "tak", glosowanie: null,
-    opis: "Argumenty 1 i 2.", mowisz: "The first speaker for yes, please. You have two minutes." },
-  { id: "nie1", nazwa: "Pierwszy mówca NIE", czas: 120, kto: "nie", glosowanie: null,
-    opis: "Argumenty 1 i 2.", mowisz: "Thank you. The first speaker for no, please. You have two minutes." },
-  { id: "pytania", nazwa: "Pytania", czas: 240, kto: null, glosowanie: null,
-    opis: "Każda grupa zadaje 2 pytania, na zmianę, zaczyna TAK. Odpowiadają mówcy grupy, która dostała pytanie.",
+  { id: "tak1", nazwa: "First speaker YES", czas: 120, kto: "tak", glosowanie: null,
+    opis: "Arguments 1 and 2.", mowisz: "The first speaker for yes, please. You have two minutes." },
+  { id: "nie1", nazwa: "First speaker NO", czas: 120, kto: "nie", glosowanie: null,
+    opis: "Arguments 1 and 2.", mowisz: "Thank you. The first speaker for no, please. You have two minutes." },
+  { id: "pytania", nazwa: "Questions", czas: 240, kto: null, glosowanie: null,
+    opis: "Each team asks 2 questions, taking turns, YES starts. The speakers of the team that got the question answer.",
     mowisz: "Now it's time for questions. Yes team, your first question, please. No team, please answer. Short answers, please. Now it's your turn, no team." },
-  { id: "narada", nazwa: "Narada", czas: 60, kto: null, glosowanie: null,
-    opis: "Każda grupa ustala, na co odpowie jej drugi mówca.",
+  { id: "narada", nazwa: "Team talk", czas: 60, kto: null, glosowanie: null,
+    opis: "Each team decides what its second speaker will answer.",
     mowisz: "You have one minute. Talk in your teams and choose one point you want to answer." },
-  { id: "tak2", nazwa: "Drugi mówca TAK", czas: 120, kto: "tak", glosowanie: null,
-    opis: "Argument 3 i odpowiedź na jedną rzecz drugiej grupy.",
+  { id: "tak2", nazwa: "Second speaker YES", czas: 120, kto: "tak", glosowanie: null,
+    opis: "Argument 3 and an answer to one point from the other team.",
     mowisz: "The second speaker for yes, please. Give us your third argument and answer one point from the other team." },
-  { id: "nie2", nazwa: "Drugi mówca NIE", czas: 120, kto: "nie", glosowanie: null,
-    opis: "To samo: argument 3 i odpowiedź.", mowisz: "Thank you. The second speaker for no, please." },
-  { id: "wynik", nazwa: "Drugie głosowanie i wynik", czas: 120, kto: null, glosowanie: "po",
-    opis: "Otwierasz drugie głosowanie, zamykasz, zapisujesz. Podajesz oba wyniki i kto przeciągnął więcej osób.",
+  { id: "nie2", nazwa: "Second speaker NO", czas: 120, kto: "nie", glosowanie: null,
+    opis: "The same: argument 3 and an answer.", mowisz: "Thank you. The second speaker for no, please." },
+  { id: "wynik", nazwa: "Second vote and result", czas: 120, kto: null, glosowanie: "po",
+    opis: "Open the second vote, close it, save it. Give both results and say who changed more minds.",
     mowisz: "Time for the second vote, on your phones again. You can change your mind. Voting is open now. … Voting is closed. Before the debate: yes …, no …. After the debate: yes …, no …. The … team changed … minds, so … wins." },
-  { id: "sprawdzajacy", nazwa: "Sprawdzający", czas: 180, kto: null, glosowanie: null,
-    opis: "Sprawdzający mówią, czy któryś fakt się nie zgadzał. Brawa dla obu grup. Opiekun kończy nagranie, zdjęcia obu kartek.",
+  { id: "sprawdzajacy", nazwa: "Fact-checkers", czas: 180, kto: null, glosowanie: null,
+    opis: "Fact-checkers say whether any fact didn't add up. A big hand for both teams. The teacher stops the recording and photographs both sheets.",
     mowisz: "Fact-checkers, did anything not add up? Thank you, everyone. Let's give both teams a big hand." },
 ];
 
@@ -177,28 +181,27 @@ const DEBATY = [
   {
     nr: 1, tak: 1, nie: 2,
     pytanie: "Should 16-year-olds have the right to vote?",
-    pytaniePl: "Czy 16-latkowie powinni mieć prawo głosu w wyborach?",
     wejscie: "Let's begin. This is debate number one. Our question is: Should 16-year-olds have the right to vote? Group one is the yes team, group two is the no team.",
-    uwaga: "Na tej debacie wszyscy muszą zrozumieć zasady głosowania, bo w dwóch następnych nie będzie na to czasu.",
+    uwaga: "In this debate everyone has to understand how voting works. There will be no time for it in the next two.",
     fakty: [
-      "Polska od 18 lat, Grecja od 17, nie od 16.",
-      "Krajowo od 16 lat w UE: tylko Austria i Malta.",
-      "Niemcy, Belgia: 16 lat w wyborach do PE w 2024. Niemcy krajowo nadal 18.",
-      "PE poparł 16 lat w 2015, ale decyzja należy do państw.",
-      "Danych o frekwencji młodych i przepisów o 16-latkach nie ma w materiałach. Każdą taką liczbę weryfikuje sprawdzający.",
+      "Poland: voting from 18. Greece: from 17, not 16.",
+      "National elections from 16 in the EU: only Austria and Malta.",
+      "Germany, Belgium: 16 applied to the 2024 European Parliament elections. Germany still has 18 for national elections.",
+      "The European Parliament backed 16 in 2015, but the decision belongs to each country.",
+      "Youth turnout data and Polish rules on what a 16-year-old may do are not in our materials. The fact-checker verifies any such number.",
     ],
     dopytaj: {
       tak: [
-        ["Młodzi najdłużej będą żyć ze skutkami decyzji.", "Doesn't that also apply to 14-year-olds?"],
-        ["16-latek ma już obowiązki i odpowiedzialność.", "Which ones, exactly? Where did you check that?"],
-        ["Kto zagłosuje wcześnie, zagłosuje też później.", "What evidence do you have from Austria?"],
-        ["Politycy nie słuchają tych, którzy nie głosują.", "Can you name one decision that would change?"],
+        ["Young people will live longest with the consequences.", "Doesn't that also apply to 14-year-olds?"],
+        ["A 16-year-old already has duties and responsibility.", "Which ones, exactly? Where did you check that?"],
+        ["Those who vote early keep voting later.", "What evidence do you have from Austria?"],
+        ["Politicians don't listen to people who don't vote.", "Can you name one decision that would change?"],
       ],
       nie: [
-        ["16-latkami łatwiej sterować.", "Are 18-year-olds really so different? Who else is influenced?"],
-        ["Granica 16 lat jest przypadkowa.", "Isn't 18 just as arbitrary?"],
-        ["Młodzi i tak nie chodzą na wybory.", "Is low turnout a reason to take away a right?"],
-        ["Prawo głosu bez innych praw dorosłych nie ma sensu.", "Do all adult rights have to start at the same age?"],
+        ["16-year-olds are easier to influence.", "Are 18-year-olds really so different? Who else is influenced?"],
+        ["The age of 16 is an arbitrary line.", "Isn't 18 just as arbitrary?"],
+        ["Young people don't go to vote anyway.", "Is low turnout a reason to take away a right?"],
+        ["The vote makes no sense without other adult rights.", "Do all adult rights have to start at the same age?"],
       ],
     },
     cisza: [
@@ -210,29 +213,28 @@ const DEBATY = [
   {
     nr: 2, tak: 2, nie: 1,
     pytanie: "Should some Members of Parliament be chosen by lot instead of being elected?",
-    pytaniePl: "Czy część posłów powinna być losowana, a nie wybierana?",
     wejscie: "Thank you, everyone. Time for debate number two. New speakers, please come to the front. This time the teams switch sides: group two is the yes team and group one is the no team. Our question is: Should some Members of Parliament be chosen by lot instead of being elected? Remember, the question says some, not all of them.",
-    uwaga: "Najtrudniejsza z trzech. Pilnuj słowa „część”: nikt nie proponuje losowania całego parlamentu. Irlandzkie zgromadzenie obradowało o aborcji. Jeśli rozmowa pójdzie w tę stronę: We're debating how decisions are made, not this one decision.",
+    uwaga: "The hardest of the three. Watch the word \"some\": nobody proposes drawing the whole parliament by lot. The Irish assembly debated abortion. If the talk goes that way: We're debating how decisions are made, not this one decision.",
     fakty: [
-      "Rada Pięciuset: losowana na rok spośród ochotników po 30. roku życia, najwyżej 2 razy w życiu.",
-      "Z ok. 1100 urzędów rocznie ok. 100 obsadzano w głosowaniu (m.in. strategów), resztę losowano.",
-      "Kobiety, niewolnicy i metojkowie nie mieli praw politycznych.",
-      "Gdańsk 2016: 80% poparcia dawało wiążącą rekomendację z deklaracji prezydenta, nie z przepisu prawa.",
-      "Irlandia: 99 wylosowanych osób, 2016 i 2017, potem parlament, referendum w 2018.",
-      "„Nie znaleźliśmy państwa” z losowaną częścią parlamentu krajowego to nie to samo co „nie ma takiego państwa”.",
+      "Council of Five Hundred: drawn by lot for one year from volunteers over 30, at most twice in a lifetime.",
+      "Of about 1,100 offices a year, about 100 were filled by election (generals among them); the rest were drawn by lot.",
+      "Women, slaves and metics had no political rights.",
+      "Gdańsk 2016: 80% support made a recommendation binding because the mayor declared so, not because of a law.",
+      "Ireland: 99 people drawn by lot, 2016 and 2017, then parliament, then a referendum in 2018.",
+      "\"We didn't find a country\" with part of its national parliament drawn by lot is not the same as \"there is no such country\".",
     ],
     dopytaj: {
       tak: [
-        ["W Sejmie brakuje wielu grup społecznych.", "Which groups? What do the numbers show?"],
-        ["Wylosowany nie myśli o następnych wyborach.", "Who will he or she listen to instead?"],
-        ["Gdańsk i Irlandia pokazują, że zwykli ludzie sobie radzą.", "Those were advisory bodies. Is that the same as passing laws?"],
-        ["To tylko część posłów, reszta wnosi doświadczenie.", "How many exactly? What would that look like?"],
+        ["Many social groups are missing from the Sejm.", "Which groups? What do the numbers show?"],
+        ["A person drawn by lot doesn't think about the next election.", "Who will he or she listen to instead?"],
+        ["Gdańsk and Ireland show ordinary people can cope.", "Those were advisory bodies. Is that the same as passing laws?"],
+        ["Only some MPs, the rest bring experience.", "How many exactly? What would that look like?"],
       ],
       nie: [
-        ["Nikt nie głosował na wylosowanego, nie ma go kto rozliczyć.", "How often are elected MPs really held to account?"],
-        ["Nawet Ateńczycy nie losowali dowódców.", "But they drew most of their offices by lot. Why?"],
-        ["Bez doświadczenia ustawy napiszą urzędnicy i lobbyści.", "Doesn't that happen today as well?"],
-        ["Kto się zgłosi albo kogo zmusimy?", "Is it different from jury duty in other countries?"],
+        ["Nobody voted for them, so nobody can hold them to account.", "How often are elected MPs really held to account?"],
+        ["Even the Athenians didn't draw their generals.", "But they drew most of their offices by lot. Why?"],
+        ["Without experience, officials and lobbyists will write the laws.", "Doesn't that happen today as well?"],
+        ["Who will volunteer, or whom will we force?", "Is it different from jury duty in other countries?"],
       ],
     },
     cisza: [
@@ -244,28 +246,27 @@ const DEBATY = [
   {
     nr: 3, tak: 1, nie: 2,
     pytanie: "Should social media be banned for children under 15?",
-    pytaniePl: "Czy media społecznościowe powinny być zakazane dla osób poniżej 15 lat?",
     wejscie: "And now our last debate, number three. New speakers to the front, please. Group one is yes again, and group two is no. Our question is: Should social media be banned for children under 15? In this debate, every speaker says one argument without reading it.",
-    uwaga: "Każdy mówca jeden argument mówi z głowy. Własny przykład jest dowodem, ale o sobie, nie o kolegach. Fakty: stan na 3 listopada 2026, sprawdź, czy coś się zmieniło.",
+    uwaga: "Every speaker says one argument without reading. A personal example counts as evidence, but about yourself, not your classmates. Facts as of 3 November 2026: check whether anything has changed.",
     fakty: [
-      "Grecja: zakaz poniżej 15 lat uchwalony, wchodzi w życie 1 stycznia 2027.",
-      "Polska: próg 15 lat to na razie projekt w wykazie prac legislacyjnych rządu.",
-      "Komisja Europejska, EU KIDS Act (propozycja): poniżej 13 bez kont, od 13 konto zarządzane przez opiekuna z limitem godziny dziennie, od 15 własne.",
-      "Parlament Europejski: rezolucja z listopada 2025 mówi o 16 latach i jest niewiążąca.",
-      "Australia: próg 16, nie 15. Ponad 4,7 mln kont podały same platformy, późniejsze badanie: wielu młodych nadal ma konta.",
+      "Greece: a ban under 15 has been passed; it comes into force on 1 January 2027.",
+      "Poland: the 15 limit is still only a draft on the government's legislative work list.",
+      "European Commission, EU KIDS Act (proposal): no accounts under 13; from 13, accounts managed by a parent with a one-hour daily limit; own account from 15.",
+      "European Parliament: the November 2025 resolution says 16 and is non-binding.",
+      "Australia: the limit is 16, not 15. The figure of over 4.7 million accounts came from the platforms; a later study found many young people still have accounts.",
     ],
     dopytaj: {
       tak: [
-        ["Znamy to z własnego telefonu.", "Is one story enough to change the law?"],
-        ["Rodzice sami tego nie upilnują.", "Why should the state step in rather than the school?"],
-        ["Nikogo nie dziwi zakaz alkoholu dla nieletnich.", "Is social media really comparable to alcohol?"],
-        ["Zakaz działa, nawet gdy część osób go obejdzie.", "How big a part? What do the figures from Australia show?"],
+        ["We know it from our own phones.", "Is one story enough to change the law?"],
+        ["Parents can't control it on their own.", "Why should the state step in rather than the school?"],
+        ["Nobody is surprised that alcohol is banned for minors.", "Is social media really comparable to alcohol?"],
+        ["A ban works even if some people get around it.", "How big a part? What do the figures from Australia show?"],
       ],
       nie: [
-        ["Zakazu nie da się wyegzekwować.", "Do we drop every law that people sometimes break?"],
-        ["Sprawdzanie wieku oznacza oddawanie danych.", "Who would store them? Is there a safer way?"],
-        ["14-latek traci kontakty i wsparcie.", "What did teenagers do before social media? Is it the same today?"],
-        ["To platformy mają się zmienić.", "Why would they, if nothing forces them?"],
+        ["The ban can't be enforced.", "Do we drop every law that people sometimes break?"],
+        ["Age checks mean handing over personal data.", "Who would store them? Is there a safer way?"],
+        ["A 14-year-old loses contacts and support.", "What did teenagers do before social media? Is it the same today?"],
+        ["It's the platforms that should change.", "Why would they, if nothing forces them?"],
       ],
     },
     cisza: [
@@ -276,7 +277,7 @@ const DEBATY = [
   },
 ];
 
-/* Wstęp i zakończenie: tekst z otwarcie-en.html, do czytania wprost. */
+/* Opening and closing: text from otwarcie-en.html, to be read out. */
 const WSTEP = [
   { nazwa: "Welcome", mowisz: "Good morning, everyone, and welcome. Today we are going to hold three debates, all of them in English. Each debate starts with a simple question that you can answer with yes or no.\n\nYou are in two teams, and your team stays the same for all three debates. Only your side changes. You didn't choose your side, it was given to you. So some of you will have to defend an idea you don't agree with. That's the whole point. Today we are not checking who is right. We are checking who can convince the room." },
   { nazwa: "How it works", mowisz: "Every debate has four speakers, two from each team. The speakers change every time, so by the end of the day twelve of you will have spoken. The yes team always goes first.\n\nEach speaker has two minutes. I'll let you know when you have thirty seconds left. When your time is up, please finish your sentence and stop there.\n\nAfter the first two speeches, each team asks the other team two questions. Then you get one minute to talk in your team, and the second speakers answer one point from the other side." },
@@ -290,10 +291,19 @@ const ZAKONCZENIE = [
   { nazwa: "Goodbye", mowisz: "Before you go, please add the new words from today's debates to your glossary. Thank you all, you did a great job. Let's give everyone a big hand." },
 ];
 
-if (typeof module !== "undefined") module.exports = { OCZEKIWANYCH_GLOSOW, DROPBOX_SZKOLY, FAZY_DEBATY, DEBATY, WSTEP, ZAKONCZENIE };
+/* Big-screen rules: short versions of the opening. */
+const ZASADY_TV = [
+  "An argument = a claim + evidence.",
+  "Answer the argument, not the person.",
+  "Can't find a word? Say it in Polish.",
+  "Two minutes per speaker.",
+  "We vote twice. The team that changes more minds wins.",
+];
+
+if (typeof module !== "undefined") module.exports = { OCZEKIWANYCH_GLOSOW, DROPBOX_SZKOLY, DROPBOX_TESTOWY, FAZY_DEBATY, DEBATY, WSTEP, ZAKONCZENIE, ZASADY_TV };
 
 ;
-/* Słówka i źródła. Uczniowie widzą słówka i źródła, nigdy faktów: przy źródle jest pytanie, na które odpowiada. */
+/* Vocabulary and sources. Students see vocabulary and sources, never facts: each source comes with the question it answers. */
 const SLOWKA_PROWADZENIE = [
   ["moderator", "prowadzący"], ["speaker", "mówca"], ["the floor is yours", "masz głos"],
   ["to take turns", "mówić na zmianę"], ["opening speech", "pierwsze wystąpienie"],
@@ -341,42 +351,42 @@ const SLOWKA_DEBAT = {
 };
 
 const ZASADY_SPRAWDZANIA = [
-  "Kto to napisał? Instytucja, redakcja, autor z nazwiska, czy anonim?",
-  "Kiedy? Sprawdź datę. Przepisy i projekty ustaw szybko się zmieniają.",
-  "Czy drugie, niezależne źródło mówi to samo?",
-  "Liczba bez źródła to nie dowód. Zapytaj: according to whom?",
-  "Wikipedia to dobry start, ale zajrzyj do przypisów na dole hasła.",
-  "Zapisz, gdzie sprawdziłeś, i powiedz to na koniec debaty.",
+  "Who wrote it? An institution, a newsroom, a named author or nobody?",
+  "When? Check the date. Laws and draft bills change quickly.",
+  "Does a second, independent source say the same?",
+  "A number without a source is not evidence. Ask: according to whom?",
+  "Wikipedia is a good start, but check the references at the bottom.",
+  "Write down where you checked and say it at the end of the debate.",
 ];
 
-/* [nazwa, adres, pytanie, na które to źródło odpowiada] */
+/* [name, address, question this source answers] */
 const ZRODLA = {
   1: [
-    ["Youth Wiki (Komisja Europejska)", "https://national-policies.eacea.ec.europa.eu/youthwiki", "Od ilu lat głosuje się w poszczególnych krajach UE?"],
-    ["EP Think Tank", "https://epthinktank.eu/2023/12/05/youth-participation-in-european-elections/", "Jak młodzi głosują w wyborach europejskich?"],
-    ["European Youth Forum", "https://www.youthforum.org/news/european-parliament-backs-right-for-16-17-year-olds-to-vote", "Co Parlament Europejski mówił o wieku wyborczym?"],
-    ["ANSA Nuova Europa", "https://www.ansa.it/nuova_europa/en", "Kiedy i jak Grecja zmieniła wiek wyborczy?"],
-    ["PKW, Państwowa Komisja Wyborcza", "https://pkw.gov.pl", "Jaka była frekwencja w polskich wyborach?"],
-    ["ISAP, polskie przepisy", "https://isap.sejm.gov.pl", "Co wolno 16-latkowi w Polsce i za co odpowiada?"],
+    ["Youth Wiki (European Commission)", "https://national-policies.eacea.ec.europa.eu/youthwiki", "From what age do people vote in each EU country?"],
+    ["EP Think Tank", "https://epthinktank.eu/2023/12/05/youth-participation-in-european-elections/", "How do young people vote in European elections?"],
+    ["European Youth Forum", "https://www.youthforum.org/news/european-parliament-backs-right-for-16-17-year-olds-to-vote", "What did the European Parliament say about voting age?"],
+    ["ANSA Nuova Europa", "https://www.ansa.it/nuova_europa/en", "When and how did Greece change its voting age?"],
+    ["PKW, Polish National Electoral Commission", "https://pkw.gov.pl", "What was the turnout in Polish elections?"],
+    ["ISAP, Polish legal acts", "https://isap.sejm.gov.pl", "What may a 16-year-old do in Poland, and what are they responsible for?"],
   ],
   2: [
-    ["Wikipedia: Athenian democracy", "https://en.wikipedia.org/wiki/Athenian_democracy", "Jakie urzędy w Atenach losowano, a jakie wybierano?"],
-    ["Wikipedia: Boule", "https://en.wikipedia.org/wiki/Boule_(ancient_Greece)", "Jak działała Rada Pięciuset?"],
-    ["Wikipedia: Kleroterion", "https://en.wikipedia.org/wiki/Kleroterion", "Jak technicznie losowano obywateli?"],
-    ["Wikipedia: Sortition", "https://en.wikipedia.org/wiki/Sortition", "Gdzie dziś używa się losowania?"],
-    ["Raport z panelu obywatelskiego w Gdańsku", "https://download.cloudgdansk.pl/gdansk-pl/d/20170183715", "Jak działał panel i co było z jego rekomendacjami?"],
-    ["Wikipedia: Citizens' Assembly (Ireland)", "https://en.wikipedia.org/wiki/Citizens%27_Assembly_(Ireland)", "Kto zasiadał w irlandzkim zgromadzeniu i co zrobiło?"],
-    ["Wikipedia: 36th Amendment (Ireland)", "https://en.wikipedia.org/wiki/Thirty-sixth_Amendment_of_the_Constitution_of_Ireland", "Co stało się po zgromadzeniu?"],
-    ["Sejm RP", "https://www.sejm.gov.pl", "Kim są posłowie: wiek, płeć, zawody?"],
+    ["Wikipedia: Athenian democracy", "https://en.wikipedia.org/wiki/Athenian_democracy", "Which offices in Athens were drawn by lot and which were elected?"],
+    ["Wikipedia: Boule", "https://en.wikipedia.org/wiki/Boule_(ancient_Greece)", "How did the Council of Five Hundred work?"],
+    ["Wikipedia: Kleroterion", "https://en.wikipedia.org/wiki/Kleroterion", "How exactly were citizens drawn?"],
+    ["Wikipedia: Sortition", "https://en.wikipedia.org/wiki/Sortition", "Where is sortition used today?"],
+    ["Report of the Gdańsk citizens' panel (in Polish)", "https://download.cloudgdansk.pl/gdansk-pl/d/20170183715", "How did the panel work and what happened to its recommendations?"],
+    ["Wikipedia: Citizens' Assembly (Ireland)", "https://en.wikipedia.org/wiki/Citizens%27_Assembly_(Ireland)", "Who sat in the Irish assembly and what did it do?"],
+    ["Wikipedia: 36th Amendment (Ireland)", "https://en.wikipedia.org/wiki/Thirty-sixth_Amendment_of_the_Constitution_of_Ireland", "What happened after the assembly?"],
+    ["Sejm (Polish parliament)", "https://www.sejm.gov.pl", "Who are the MPs: age, gender, jobs?"],
   ],
   3: [
-    ["Al Jazeera, 23.10.2026", "https://www.aljazeera.com/news/2026/10/23/greece-joins-push-to-ban-social-media-for-minors", "Co zdecydowała Grecja i od kiedy?"],
-    ["XYZ.pl", "https://xyz.pl/dzieje-sie/media-spolecznosciowe-tylko-dla-tych-ktorzy-ukonczyli-15-lat-jest-projekt-ustawy-1380", "Na jakim etapie jest pomysł w Polsce?"],
-    ["Rządowy wykaz prac legislacyjnych", "https://legislacja.gov.pl", "Czy projekt ustawy w Polsce poszedł dalej?"],
-    ["Komisja Europejska (przedstawicielstwo)", "https://luxembourg.representation.ec.europa.eu", "Co proponuje Komisja Europejska (17.09.2026)?"],
-    ["Parlament Europejski, komunikat", "https://www.europarl.europa.eu/news/en/press-room/20251013IPR30892", "Co i jak przegłosował Parlament Europejski?"],
-    ["eSafety (Australia)", "https://www.esafety.gov.au/research/social-media-age-restrictions-evaluation", "Jak działa zakaz w Australii i od ilu lat?"],
-    ["Tech Policy Press", "https://www.techpolicy.press/early-lessons-from-australias-teen-social-media-ban-for-the-rest-of-the-world/", "Czy młodzi w Australii obchodzą zakaz?"],
+    ["Al Jazeera, 23.10.2026", "https://www.aljazeera.com/news/2026/10/23/greece-joins-push-to-ban-social-media-for-minors", "What did Greece decide, and from when?"],
+    ["XYZ.pl (in Polish)", "https://xyz.pl/dzieje-sie/media-spolecznosciowe-tylko-dla-tych-ktorzy-ukonczyli-15-lat-jest-projekt-ustawy-1380", "How far has the idea got in Poland?"],
+    ["Polish government legislation list", "https://legislacja.gov.pl", "Has the Polish draft bill moved on?"],
+    ["European Commission (representation)", "https://luxembourg.representation.ec.europa.eu", "What does the European Commission propose (17.09.2026)?"],
+    ["European Parliament press release", "https://www.europarl.europa.eu/news/en/press-room/20251013IPR30892", "What did the European Parliament vote for, and how?"],
+    ["eSafety (Australia)", "https://www.esafety.gov.au/research/social-media-age-restrictions-evaluation", "How does the ban in Australia work, and from what age?"],
+    ["Tech Policy Press", "https://www.techpolicy.press/early-lessons-from-australias-teen-social-media-ban-for-the-rest-of-the-world/", "Do young Australians get around the ban?"],
   ],
 };
 
@@ -392,6 +402,7 @@ function nowyStan() {
     v: 1, rev: 0, wyslano: 0, sesja: 1,
     ekran: { debata: 0, faza: 0 },
     glosowanie: null,
+    tvNaZywo: true,
     proby: {},
     timer: { stan: "stop", czas: 120, koniec: null, pozostalo: null, etykieta: "", kto: null },
     wyniki: { 1: { przed: null, po: null }, 2: { przed: null, po: null }, 3: { przed: null, po: null } },
@@ -561,11 +572,29 @@ if (typeof module !== "undefined") {
 }
 
 ;
+/* Fazy ekranu wspólne dla tabletu i telewizora: 0 wstęp, 1–3 debaty, 4 zakończenie. */
+function fazyEkranu(nr) {
+  if (nr === 0) return WSTEP;
+  if (nr === 4) return ZAKONCZENIE;
+  const debata = DEBATY[nr - 1];
+  return FAZY_DEBATY.map((faza, i) => (i === 0 ? { ...faza, mowisz: `${debata.wejscie}\n\n${faza.mowisz}` } : faza));
+}
+
+function fazaStanu(stan) {
+  const fazy = fazyEkranu(stan.ekran.debata);
+  return fazy[Math.min(stan.ekran.faza, fazy.length - 1)];
+}
+
+if (typeof module !== "undefined") module.exports = { fazyEkranu, fazaStanu };
+
+;
 /* Łącze na żywo: dwa publiczne serwery MQTT naraz, żeby awaria jednego nie zatrzymała debaty.
    Stan i głosy są „retained”: serwer oddaje ostatnią wersję każdemu, kto dołączy później. */
 const BROKERY = ["wss://broker.hivemq.com:8884/mqtt", "wss://broker.emqx.io:8084/mqtt"];
-/* Adres z ?test łączy się z osobnym kanałem: próby nie mieszają się z zajęciami. */
-const TRYB_TESTOWY = new URLSearchParams(location.search).has("test");
+/* Adres z ?test łączy się z osobnym kanałem: próby nie mieszają się z zajęciami.
+   Po testach zbuduj.py ustawia TEST_DOZWOLONY na false i ?test przestaje działać. */
+const TEST_DOZWOLONY = true;
+const TRYB_TESTOWY = TEST_DOZWOLONY && new URLSearchParams(location.search).has("test");
 const PREFIKS = `pfdebaty-kr-6pnf86komr${TRYB_TESTOWY ? "-test" : ""}`;
 
 function czytajWiadomosc(temat, bufor) {
@@ -660,6 +689,13 @@ function wstaw(wezel, ...dzieci) {
   wezel.replaceChildren(...dzieci.filter((d) => d !== null && d !== undefined && d !== false));
 }
 
+/* Pasek trybu testowego na każdym ekranie, żeby próby nie pomylić z zajęciami. */
+function pokazBanerTestu(tekst) {
+  if (!TRYB_TESTOWY) return;
+  const baner = el("div", { className: "baner-testu", role: "status", textContent: tekst });
+  document.body.prepend(baner);
+}
+
 function el(tag, wlasciwosci = {}, ...dzieci) {
   const wezel = Object.assign(document.createElement(tag), wlasciwosci);
   wezel.append(...dzieci.filter((d) => d !== null && d !== undefined && d !== false));
@@ -667,20 +703,24 @@ function el(tag, wlasciwosci = {}, ...dzieci) {
 }
 
 ;
-/* Tekst wyników do pliku i do skopiowania. Bez DOM: testy w test_raport.js. */
-const NAZWA_PLIKU_WYNIKOW = "Debaty wyniki głosowań.png";
-const NAZWY_STRON = { tak: "TAK", nie: "NIE", remis: "remis" };
+/* Tekst wyników do pliku i do skopiowania. Bez DOM: testy w test_logika.js. */
+const NAZWA_PLIKU_WYNIKOW = "Debates voting results.png";
+const NAZWY_STRON = { tak: "YES", nie: "NO", remis: "tie" };
+
+function nazwaPlikuWynikow(testowy) {
+  return testowy ? `TEST ${NAZWA_PLIKU_WYNIKOW}` : NAZWA_PLIKU_WYNIKOW;
+}
 
 function opisRundy(wynik) {
-  if (!wynik) return "nie zapisano";
-  return `TAK ${wynik.tak}, NIE ${wynik.nie} (razem ${wynik.tak + wynik.nie})`;
+  if (!wynik) return "not saved";
+  return `YES ${wynik.tak}, NO ${wynik.nie} (total ${wynik.tak + wynik.nie})`;
 }
 
 function opisZwyciezcy(wynikDebaty) {
   const z = zwyciezca(wynikDebaty);
-  if (!z) return "brak obu głosowań";
-  if (z.strona === "remis") return "remis";
-  return `wygrywa ${NAZWY_STRON[z.strona]}, przekonało ${z.przekonani}`;
+  if (!z) return "one or both votes missing";
+  if (z.strona === "remis") return "tie";
+  return `${NAZWY_STRON[z.strona]} wins, changed ${z.przekonani} ${z.przekonani === 1 ? "mind" : "minds"}`;
 }
 
 function wierszeWynikow(stan) {
@@ -689,7 +729,7 @@ function wierszeWynikow(stan) {
     return {
       nr: debata.nr,
       pytanie: debata.pytanie,
-      strony: `TAK: grupa ${debata.tak}, NIE: grupa ${debata.nie}`,
+      strony: `YES: group ${debata.tak}, NO: group ${debata.nie}`,
       przed: opisRundy(w.przed),
       po: opisRundy(w.po),
       wynik: opisZwyciezcy(w),
@@ -697,15 +737,16 @@ function wierszeWynikow(stan) {
   });
 }
 
-function tekstWynikow(stan, data) {
+function tekstWynikow(stan, data, testowy = false) {
   const bloki = wierszeWynikow(stan).map((w) => [
-    `Debata ${w.nr}: ${w.pytanie}`,
+    `Debate ${w.nr}: ${w.pytanie}`,
     w.strony,
-    `Przed debatą: ${w.przed}`,
-    `Po debacie: ${w.po}`,
-    `Wynik: ${w.wynik}`,
+    `Before the debate: ${w.przed}`,
+    `After the debate: ${w.po}`,
+    `Result: ${w.wynik}`,
   ].join("\n"));
-  return [`LO Krościenko, debaty, wyniki głosowań (${data})`, ...bloki].join("\n\n");
+  const naglowek = `${testowy ? "TEST RUN. " : ""}LO Krościenko, debates, voting results (${data})`;
+  return [naglowek, ...bloki].join("\n\n");
 }
 
 function czyKompletne(stan) {
@@ -713,7 +754,7 @@ function czyKompletne(stan) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { NAZWA_PLIKU_WYNIKOW, wierszeWynikow, tekstWynikow, czyKompletne };
+  module.exports = { NAZWA_PLIKU_WYNIKOW, nazwaPlikuWynikow, wierszeWynikow, tekstWynikow, czyKompletne, opisZwyciezcy };
 }
 
 ;
@@ -804,16 +845,16 @@ function rysujBlokDebaty(ctx, w, gora) {
   ctx.lineWidth = 3;
   ctx.beginPath(); ctx.moveTo(margines, gora); ctx.lineTo(szer - margines, gora); ctx.stroke();
   ctx.fillStyle = kolory.blue; czcionka(ctx, 30, true);
-  ctx.fillText(`Debata ${w.nr}`, margines, gora + 48);
+  ctx.fillText(`Debate ${w.nr}`, margines, gora + 48);
   ctx.fillStyle = kolory.ink; czcionka(ctx, 27, true);
   ctx.fillText(w.pytanie, margines, gora + 90);
   czcionka(ctx, 25); ctx.fillStyle = kolory.tx;
   ctx.fillText(w.strony, margines, gora + 128);
-  const wiersze = [["Przed debatą", w.przed], ["Po debacie", w.po], ["Wynik", w.wynik]];
+  const wiersze = [["Before", w.przed], ["After", w.po], ["Result", w.wynik]];
   wiersze.forEach(([etykieta, wartosc], i) => {
     const y = gora + 176 + i * 42;
     ctx.fillStyle = kolory.euBlue; czcionka(ctx, 26, true); ctx.fillText(etykieta, margines, y);
-    ctx.fillStyle = kolory.ink; czcionka(ctx, 26, i === 2); ctx.fillText(wartosc, margines + 260, y);
+    ctx.fillStyle = kolory.ink; czcionka(ctx, 26, i === 2); ctx.fillText(wartosc, margines + 200, y);
   });
   return gora + 300;
 }
@@ -827,9 +868,9 @@ function rysujWyniki(canvas, stan, data) {
   ctx.fillStyle = kolory.blue; ctx.fillRect(margines, 40, szer - 2 * margines, 64);
   ctx.fillStyle = "#fff"; czcionka(ctx, 28, true); ctx.fillText("LO Krościenko", margines + 22, 82);
   czcionka(ctx, 24);
-  const prawy = "Debaty „za i przeciw”";
+  const prawy = TRYB_TESTOWY ? "TEST RUN" : "For and against debates";
   ctx.fillText(prawy, szer - margines - 22 - ctx.measureText(prawy).width, 81);
-  ctx.fillStyle = kolory.blue; czcionka(ctx, 42, true); ctx.fillText("Wyniki głosowań", margines, 168);
+  ctx.fillStyle = kolory.blue; czcionka(ctx, 42, true); ctx.fillText("Voting results", margines, 168);
   ctx.fillStyle = kolory.tx; czcionka(ctx, 24); ctx.fillText(data, margines + 380, 166);
   let gora = 210;
   for (const w of wierszeWynikow(stan)) gora = rysujBlokDebaty(ctx, w, gora);
@@ -857,15 +898,15 @@ function pobierz(plik) {
 
 /* Rysuje obraz synchronicznie (bez toBlob), pokazuje podgląd i tekst, potem próbuje pobrać plik. */
 function przygotujPlikWynikow(stan, cel) {
-  const data = new Date().toLocaleString("pl-PL");
+  const data = new Date().toLocaleString("en-GB");
   const canvas = document.createElement("canvas");
-  cel.tekst.value = tekstWynikow(stan, data);
+  cel.tekst.value = tekstWynikow(stan, data, TRYB_TESTOWY);
   let plik = null;
   try {
     rysujWyniki(canvas, stan, data);
     const dataUrl = canvas.toDataURL("image/png");
     cel.obraz.src = dataUrl;
-    plik = plikZDataUrl(dataUrl, NAZWA_PLIKU_WYNIKOW);
+    plik = plikZDataUrl(dataUrl, nazwaPlikuWynikow(TRYB_TESTOWY));
   } catch (blad) {
     console.warn("Nie udało się narysować pliku wyników", blad);
   }
@@ -879,7 +920,7 @@ function przygotujPlikWynikow(stan, cel) {
 
 async function udostepnijPlik(plik) {
   try {
-    await navigator.share({ files: [plik], title: "Wyniki debat" });
+    await navigator.share({ files: [plik], title: "Debate results" });
   } catch (blad) {
     console.warn("Udostępnianie przerwane", blad);
   }
@@ -889,16 +930,16 @@ async function kopiujTekst(pole, potwierdzenie) {
   pole.select();
   try {
     await navigator.clipboard.writeText(pole.value);
-    potwierdzenie.textContent = "Skopiowane.";
+    potwierdzenie.textContent = "Copied.";
   } catch (blad) {
     console.warn("Schowek niedostępny", blad);
-    potwierdzenie.textContent = document.execCommand("copy") ? "Skopiowane." : "Tekst jest zaznaczony, skopiuj ręcznie.";
+    potwierdzenie.textContent = document.execCommand("copy") ? "Copied." : "The text is selected, copy it by hand.";
   }
 }
 
 ;
 /* Karta głosowania na tablecie: otwórz, zamknij, zapisz wynik, powtórz. */
-const NAZWY_RUND = { przed: "przed debatą", po: "po debacie" };
+const NAZWY_RUND = { przed: "before the debate", po: "after the debate" };
 
 function rundaNaEkranie() {
   const nr = stan.ekran.debata;
@@ -908,16 +949,16 @@ function rundaNaEkranie() {
 }
 
 function opisWyniku(wynik) {
-  if (!wynik) return "jeszcze nie zapisany";
-  const godzina = new Date(wynik.zapisano).toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" });
-  return `TAK ${wynik.tak}, NIE ${wynik.nie} (zapisany ${godzina})`;
+  if (!wynik) return "not saved yet";
+  const godzina = new Date(wynik.zapisano).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return `YES ${wynik.tak}, NO ${wynik.nie} (saved ${godzina})`;
 }
 
 function liniaZwyciezcy(nr) {
   const z = zwyciezca(stan.wyniki[nr]);
   if (!z) return null;
-  const tekst = z.strona === "remis" ? "Remis: tyle samo głosów TAK co przed debatą."
-    : `Wygrywa ${z.strona.toUpperCase()} (grupa ${DEBATY[nr - 1][z.strona]}), przekonało ${z.przekonani}.`;
+  const tekst = z.strona === "remis" ? "Tie: the same number of YES votes as before the debate."
+    : `${z.strona === "tak" ? "YES" : "NO"} wins (group ${DEBATY[nr - 1][z.strona]}), changed ${z.przekonani} ${z.przekonani === 1 ? "mind" : "minds"}.`;
   return el("p", { className: `wygrany strona-${z.strona}`, textContent: tekst });
 }
 
@@ -929,23 +970,38 @@ function przyciskGlosowania(tekst, klasa, akcja, wylaczony = false) {
 
 function zapiszZGlosowania(debata, runda, liczby) {
   const poprzedni = stan.wyniki[debata][runda];
-  if (poprzedni && !confirm(`Nadpisać zapisany wynik (${opisWyniku(poprzedni)})?`)) return;
+  if (poprzedni && !confirm(`Overwrite the saved result (${opisWyniku(poprzedni)})?`)) return;
   ustaw(zapiszWynik(stan, debata, runda, liczby, Date.now()));
 }
 
 function ostrzezenieSumy(liczby, zamkniete) {
   if (!zamkniete || liczby.razem === OCZEKIWANYCH_GLOSOW) return null;
   return el("p", { className: "komunikat uwaga",
-    textContent: `Głosów jest ${liczby.razem}, a powinno być ${OCZEKIWANYCH_GLOSOW}. Powtórz głosowanie albo popraw liczby ręcznie w zakładce Wyniki.` });
+    textContent: `There are ${liczby.razem} votes, there should be ${OCZEKIWANYCH_GLOSOW}. Repeat the vote or correct the numbers in the Results tab.` });
 }
 
 function kartaInnegoGlosowania(g) {
   const liczby = policz(glosy, g.id);
   return [
-    el("h2", { textContent: "Głosowanie nadal otwarte" }),
-    el("p", { textContent: `Debata ${g.debata}, ${NAZWY_RUND[g.runda]}: TAK ${liczby.tak}, NIE ${liczby.nie}.` }),
-    el("div", { className: "rzad" }, przyciskGlosowania("Zamknij głosowanie", "przycisk glowny", () => ustaw(zamknijGlosowanie(stan, Date.now())))),
+    el("h2", { textContent: "A vote is still open" }),
+    el("p", { textContent: `Debate ${g.debata}, ${NAZWY_RUND[g.runda]}: YES ${liczby.tak}, NO ${liczby.nie}.` }),
+    el("div", { className: "rzad" }, przyciskGlosowania("Close vote", "przycisk glowny", () => ustaw(zamknijGlosowanie(stan, Date.now())))),
   ];
+}
+
+function przyciskTv() {
+  const naZywo = stan.tvNaZywo !== false;
+  return przyciskGlosowania(naZywo ? "TV: live numbers on" : "TV: numbers after closing", "przycisk",
+    () => ustaw(zmien(stan, Date.now(), (s) => { s.tvNaZywo = !naZywo; })));
+}
+
+function liczbyGlosowania(liczby) {
+  const pole = (klasa, etykieta, wartosc, kolor = "") => el("div", { className: klasa },
+    el("p", { className: "etykieta", textContent: etykieta }), el("p", { className: `cyfry ${kolor}`, textContent: String(wartosc) }));
+  return el("div", { className: "liczby" },
+    pole("tak", "YES", liczby.tak, "strona-tak"),
+    pole("nie", "NO", liczby.nie, "strona-nie"),
+    pole("", `Total / ${OCZEKIWANYCH_GLOSOW}`, liczby.razem));
 }
 
 function rysujGlosowanie() {
@@ -963,41 +1019,39 @@ function rysujGlosowanie() {
   const biezace = g && g.debata === debata && g.runda === runda ? g : null;
   const otwarte = Boolean(biezace && biezace.otwarte);
   const liczby = biezace ? policz(glosy, biezace.id) : { tak: 0, nie: 0, razem: 0 };
-  const zapisany = stan.wyniki[debata][runda];
   const teraz = () => Date.now();
   const status = el("span", { className: `stan-glosowania ${otwarte ? "otwarte" : ""}`,
-    textContent: otwarte ? "OTWARTE" : biezace ? "zamknięte" : "nie otwarte" });
-  wstaw(karta, 
-    el("div", { className: "faza-naglowek" }, el("h2", { textContent: `Głosowanie ${NAZWY_RUND[runda]}` }), status),
-    g && g.otwarte && !biezace ? el("p", { className: "komunikat uwaga", textContent: `Otwarte jest inne głosowanie: debata ${g.debata}, ${NAZWY_RUND[g.runda]}. Otwarcie tego je zamknie.` }) : null,
-    el("div", { className: "liczby" },
-      el("div", { className: "tak" }, el("p", { className: "etykieta", textContent: "TAK" }), el("p", { className: "cyfry strona-tak", textContent: String(liczby.tak) })),
-      el("div", { className: "nie" }, el("p", { className: "etykieta", textContent: "NIE" }), el("p", { className: "cyfry strona-nie", textContent: String(liczby.nie) })),
-      el("div", {}, el("p", { className: "etykieta", textContent: `Razem / ${OCZEKIWANYCH_GLOSOW}` }), el("p", { className: "cyfry", textContent: String(liczby.razem) }))),
+    textContent: otwarte ? "OPEN" : biezace ? "closed" : "not opened" });
+  wstaw(karta,
+    el("div", { className: "faza-naglowek" }, el("h2", { textContent: `Vote ${NAZWY_RUND[runda]}` }), status),
+    g && g.otwarte && !biezace ? el("p", { className: "komunikat uwaga", textContent: `Another vote is open: debate ${g.debata}, ${NAZWY_RUND[g.runda]}. Opening this one will close it.` }) : null,
+    liczbyGlosowania(liczby),
     ostrzezenieSumy(liczby, biezace && !otwarte),
     el("div", { className: "rzad" },
       otwarte
-        ? przyciskGlosowania("Zamknij głosowanie", "przycisk glowny", () => ustaw(zamknijGlosowanie(stan, teraz())))
-        : przyciskGlosowania(biezace ? "Otwórz ponownie" : "Otwórz głosowanie", "przycisk glowny", () => ustaw(otworzGlosowanie(stan, debata, runda, teraz()))),
-      przyciskGlosowania("Zapisz wynik", "przycisk glowny", () => zapiszZGlosowania(debata, runda, liczby), !biezace || otwarte),
-      przyciskGlosowania("Powtórz od zera", "przycisk ostrozny", () => {
-        if (confirm("Głosy z tego głosowania przestaną się liczyć, wszyscy głosują od nowa. Powtórzyć?")) ustaw(powtorzGlosowanie(stan, debata, runda, teraz()));
-      }, !biezace)),
-    el("p", { className: "mala", style: "margin-top:12px", textContent: `Zapisany wynik ${NAZWY_RUND[runda]}: ${opisWyniku(zapisany)}` }),
-    runda === "po" ? el("p", { className: "mala", textContent: `Przed debatą: ${opisWyniku(stan.wyniki[debata].przed)}` }) : null,
+        ? przyciskGlosowania("Close vote", "przycisk glowny", () => ustaw(zamknijGlosowanie(stan, teraz())))
+        : przyciskGlosowania(biezace ? "Reopen" : "Open vote", "przycisk glowny", () => ustaw(otworzGlosowanie(stan, debata, runda, teraz()))),
+      przyciskGlosowania("Save result", "przycisk glowny", () => zapiszZGlosowania(debata, runda, liczby), !biezace || otwarte),
+      przyciskGlosowania("Start over", "przycisk ostrozny", () => {
+        if (confirm("Votes from this vote will no longer count and everyone votes again. Start over?")) ustaw(powtorzGlosowanie(stan, debata, runda, teraz()));
+      }, !biezace),
+      przyciskTv()),
+    el("p", { className: "mala", style: "margin-top:12px", textContent: `Saved result ${NAZWY_RUND[runda]}: ${opisWyniku(stan.wyniki[debata][runda])}` }),
+    runda === "po" ? el("p", { className: "mala", textContent: `Before the debate: ${opisWyniku(stan.wyniki[debata].przed)}` }) : null,
     liniaZwyciezcy(debata));
 }
 
 ;
 /* Panel boczny tabletu: ściąga faktów, słówka, wyniki z plikiem dla szkoły. */
-const ZAKLADKI = [["sciaga", "Ściąga"], ["slowka", "Słówka"], ["wyniki", "Wyniki"]];
+const ZAKLADKI = [["sciaga", "Cheat sheet"], ["slowka", "Vocabulary"], ["wyniki", "Results"]];
 const KLUCZ_ARCHIWUM = "debaty-prowadzacy-archiwum-v1";
 let zakladka = "sciaga";
 let plikWynikow = null;
+let kluczPanelu = "";
 
 function tabelaSlowek(pary) {
   return el("table", { className: "slowka" }, el("tbody", {},
-    ...pary.map(([en, pl]) => el("tr", {}, el("td", { textContent: en }), el("td", { textContent: pl })))));
+    ...pary.map(([en, pl]) => el("tr", {}, el("td", { textContent: en }), el("td", { textContent: pl, lang: "pl" })))));
 }
 
 function lista(pozycje) {
@@ -1006,16 +1060,16 @@ function lista(pozycje) {
 
 function ogolnaSciaga() {
   return [
-    el("h3", { textContent: "Głosy" }),
-    el("p", { textContent: `Głosuje ${OCZEKIWANYCH_GLOSOW} osób: wszyscy uczniowie bez 4 mówców. Opiekunowie nie głosują. Wynik liczysz po TAK: więcej niż przed debatą, wygrywa TAK; mniej, wygrywa NIE; tyle samo, remis.` }),
-    el("h3", { textContent: "Gdy coś idzie nie tak" }),
-    lista(["Brak kartki: 15 min na 3 argumenty PL, 10 min na tłumaczenie z opiekunem.",
-      "Mało czasu: skreśl pytania i naradę, debata trwa ok. 15 min.",
-      "Brak słowa: mówi po polsku, opiekun podpowiada. Wymowy nie poprawiasz.",
-      "Spór o fakt: nie rozstrzygasz, odsyłasz do sprawdzających na koniec.",
-      "Przytyk do osoby: Answer the argument, not the person."]),
-    el("h3", { textContent: "Po każdej debacie" }),
-    el("p", { textContent: "Koniec nagrania, zdjęcia obu kartek, nowi mówcy, grupy zmieniają strony." }),
+    el("h3", { textContent: "Votes" }),
+    el("p", { textContent: `${OCZEKIWANYCH_GLOSOW} people vote: all students except the 4 speakers. Teachers don't vote. Count the result by YES: more than before the debate, YES wins; fewer, NO wins; the same, it's a tie.` }),
+    el("h3", { textContent: "When something goes wrong" }),
+    lista(["No argument sheet: 15 min for 3 arguments in Polish, 10 min to translate with a teacher.",
+      "Short of time: drop the questions and the team talk, the debate takes about 15 min.",
+      "Missing word: they say it in Polish, a teacher helps. Don't correct pronunciation.",
+      "Dispute over a fact: don't settle it, leave it to the fact-checkers at the end.",
+      "Personal attack: Answer the argument, not the person."]),
+    el("h3", { textContent: "After each debate" }),
+    el("p", { textContent: "Stop the recording, photograph both sheets, new speakers, the teams switch sides." }),
   ];
 }
 
@@ -1024,10 +1078,10 @@ function sciagaDebaty(d) {
     ...d.dopytaj[strona].map(([arg, pytanie]) => el("li", {}, document.createTextNode(arg), el("i", { textContent: pytanie }))));
   return [
     el("p", { className: "komunikat uwaga", textContent: d.uwaga }),
-    el("h3", { textContent: "Fakty, które łatwo pomylić" }), lista(d.fakty),
-    el("h3", { className: "strona-tak", textContent: `Dopytaj stronę TAK (grupa ${d.tak})` }), dopytaj("tak"),
-    el("h3", { className: "strona-nie", textContent: `Dopytaj stronę NIE (grupa ${d.nie})` }), dopytaj("nie"),
-    el("h3", { textContent: "Gdy zrobi się cicho" }), lista(d.cisza),
+    el("h3", { textContent: "Facts that are easy to get wrong" }), lista(d.fakty),
+    el("h3", { className: "strona-tak", textContent: `Follow-up questions for YES (group ${d.tak})` }), dopytaj("tak"),
+    el("h3", { className: "strona-nie", textContent: `Follow-up questions for NO (group ${d.nie})` }), dopytaj("nie"),
+    el("h3", { textContent: "When it goes quiet" }), lista(d.cisza),
   ];
 }
 
@@ -1040,59 +1094,78 @@ function panelSlowka() {
   const nr = stan.ekran.debata;
   const debaty = nr >= 1 && nr <= 3 ? [nr] : [1, 2, 3];
   return [
-    ...debaty.flatMap((n) => [el("h3", { textContent: `Debata ${n}` }), tabelaSlowek(SLOWKA_DEBAT[n])]),
-    el("h3", { textContent: "Gdy trzeba zareagować" }), tabelaSlowek(REAKCJE),
-    el("h3", { textContent: "Prowadzenie" }), tabelaSlowek(SLOWKA_PROWADZENIE),
+    ...debaty.flatMap((n) => [el("h3", { textContent: `Debate ${n}` }), tabelaSlowek(SLOWKA_DEBAT[n])]),
+    el("h3", { textContent: "When you need to step in" }), tabelaSlowek(REAKCJE),
+    el("h3", { textContent: "Moderating" }), tabelaSlowek(SLOWKA_PROWADZENIE),
   ];
 }
 
 function wierszRecznegoWyniku(nr, runda) {
   const w = stan.wyniki[nr][runda];
-  const tak = el("input", { type: "number", inputMode: "numeric", min: 0, max: 999, value: w ? w.tak : "" });
-  const nie = el("input", { type: "number", inputMode: "numeric", min: 0, max: 999, value: w ? w.nie : "" });
-  tak.setAttribute("aria-label", `Debata ${nr} ${NAZWY_RUND[runda]}, TAK`);
-  nie.setAttribute("aria-label", `Debata ${nr} ${NAZWY_RUND[runda]}, NIE`);
-  const zapisz = el("button", { className: "przycisk", type: "button", textContent: "Zapisz" });
+  const pole = (strona, wartosc) => {
+    const wejscie = el("input", { type: "number", inputMode: "numeric", min: 0, max: 999, value: w ? wartosc : "" });
+    wejscie.setAttribute("aria-label", `Debate ${nr} ${NAZWY_RUND[runda]}, ${strona}`);
+    return wejscie;
+  };
+  const tak = pole("YES", w && w.tak);
+  const nie = pole("NO", w && w.nie);
+  const zapisz = el("button", { className: "przycisk", type: "button", textContent: "Save" });
   zapisz.addEventListener("click", () => {
     try {
       ustaw(zapiszWynik(stan, nr, runda, { tak: tak.value, nie: nie.value }, Date.now()));
     } catch (blad) {
-      alert("Wpisz obie liczby: TAK i NIE.");
+      alert("Enter both numbers: YES and NO.");
       console.warn(blad);
     }
   });
-  return el("tr", {}, el("td", { textContent: NAZWY_RUND[runda] }), el("td", {}, tak), el("td", {}, nie), el("td", {}, zapisz));
+  return el("tr", {}, el("td", { textContent: runda === "przed" ? "before" : "after" }), el("td", {}, tak), el("td", {}, nie), el("td", {}, zapisz));
+}
+
+function adresDropboxa() {
+  return TRYB_TESTOWY ? DROPBOX_TESTOWY : DROPBOX_SZKOLY;
+}
+
+function krokWysylki() {
+  const adres = adresDropboxa();
+  const opis = TRYB_TESTOWY ? "2. Upload the saved file to the TEST folder (not the school's)." : "2. Upload the saved file to the school's folder.";
+  if (!adres.startsWith("https://")) {
+    return el("div", { className: "krok" }, el("p", { textContent: opis }),
+      el("p", { className: "komunikat uwaga", textContent: "The test Dropbox link is not set yet." }));
+  }
+  return el("div", { className: "krok" }, el("p", { textContent: opis }),
+    el("div", { className: "rzad" }, el("a", { className: "przycisk glowny", href: adres, target: "_blank", rel: "noopener noreferrer",
+      textContent: TRYB_TESTOWY ? "Upload to test Dropbox" : "Upload to Dropbox" })));
 }
 
 function sekcjaPliku() {
   const tekst = el("textarea", { rows: 8, readOnly: true });
-  tekst.setAttribute("aria-label", "Wyniki jako tekst");
-  const obraz = el("img", { alt: "Plik z wynikami głosowań" });
-  const udostepnij = el("button", { className: "przycisk", type: "button", textContent: "Udostępnij plik", hidden: true });
-  const kopiuj = el("button", { className: "przycisk", type: "button", textContent: "Kopiuj tekst" });
+  tekst.setAttribute("aria-label", "Results as text");
+  const obraz = el("img", { alt: "Voting results file" });
+  const udostepnij = el("button", { className: "przycisk", type: "button", textContent: "Share file", hidden: true });
+  const kopiuj = el("button", { className: "przycisk", type: "button", textContent: "Copy text" });
   const skopiowano = el("p", { className: "mala", role: "status" });
   const podglad = el("div", { hidden: true },
-    el("p", { className: "mala", textContent: "Pliku nie ma w pobranych? Udostępnij go, przytrzymaj obrazek i zapisz albo skopiuj tekst." }),
+    el("p", { className: "mala", textContent: "File not in Downloads? Share it, press and hold the image to save it, or copy the text." }),
     udostepnij, obraz, tekst, el("div", { className: "rzad" }, kopiuj), skopiowano);
-  const brak = czyKompletne(stan) ? null : el("p", { className: "komunikat uwaga", textContent: "Nie wszystkie głosowania są zapisane. Plik zapisze się mimo to." });
-  const przygotuj = el("button", { className: "przycisk glowny", type: "button", textContent: "1. Zapisz plik z wynikami" });
+  const brak = czyKompletne(stan) ? null : el("p", { className: "komunikat uwaga", textContent: "Not all votes are saved. The file will be saved anyway." });
+  const przygotuj = el("button", { className: "przycisk glowny", type: "button", textContent: "1. Save results file" });
   przygotuj.addEventListener("click", () => {
     plikWynikow = przygotujPlikWynikow(stan, { tekst, obraz, podglad, udostepnij });
   });
   udostepnij.addEventListener("click", () => plikWynikow && udostepnijPlik(plikWynikow));
   kopiuj.addEventListener("click", () => kopiujTekst(tekst, skopiowano));
   return el("div", { className: "plik" },
-    el("h3", { textContent: "Plik dla szkoły" }), brak,
-    el("div", { className: "krok" }, el("p", {}, "Pobierze się plik ", el("b", { textContent: NAZWA_PLIKU_WYNIKOW }), "."), el("div", { className: "rzad" }, przygotuj), podglad),
-    el("div", { className: "krok" }, el("p", { textContent: "2. Wyślij zapisany plik do folderu szkoły." }),
-      el("div", { className: "rzad" }, el("a", { className: "przycisk glowny", href: DROPBOX_SZKOLY, target: "_blank", rel: "noopener noreferrer", textContent: "Wyślij na Dropbox" }))));
+    el("h3", { textContent: TRYB_TESTOWY ? "Test run file" : "File for the school" }), brak,
+    el("div", { className: "krok" }, el("p", {}, "This downloads ", el("b", { textContent: nazwaPlikuWynikow(TRYB_TESTOWY) }), "."),
+      el("div", { className: "rzad" }, przygotuj), podglad),
+    krokWysylki());
 }
 
 /* Nowa sesja po próbach: stare wyniki idą do archiwum na tablecie, głosy z prób przestają się liczyć. */
 function sekcjaSesji() {
-  const nowa = el("button", { className: "przycisk ostrozny", type: "button", textContent: "Nowa sesja (wyczyść wyniki prób)" });
+  const nowa = el("button", { className: "przycisk ostrozny", type: "button", textContent: "New session (clear results)" });
   nowa.addEventListener("click", () => {
-    if (!confirm("Wyczyścić wszystkie wyniki i zacząć od nowa? Obecne wyniki zostaną w archiwum na tym tablecie.")) return;
+    if (!confirm("Clear all results and start again? The current results stay in the archive on this tablet.")) return;
     const archiwum = czytajLokalnie(KLUCZ_ARCHIWUM, []);
     zapiszLokalnie(KLUCZ_ARCHIWUM, [...archiwum, { zapisano: Date.now(), sesja: stan.sesja, wyniki: stan.wyniki }]);
     ustaw(zmien(stan, Date.now(), (s) => {
@@ -1100,21 +1173,19 @@ function sekcjaSesji() {
       Object.assign(s, { sesja: s.sesja + 1, wyniki: czysty.wyniki, proby: {}, glosowanie: null, timer: czysty.timer, ekran: czysty.ekran });
     }));
   });
-  return el("div", { className: "krok" }, el("p", { className: "mala", textContent: `Sesja ${stan.sesja}. Użyj tylko po próbie przed zajęciami.` }), nowa);
+  return el("div", { className: "krok" }, el("p", { className: "mala", textContent: `Session ${stan.sesja}. Use only after a rehearsal, before class.` }), nowa);
 }
 
 function panelWyniki() {
   const tabele = DEBATY.flatMap((d) => [
-    el("h3", { textContent: `Debata ${d.nr}` }),
-    el("table", { className: "wyniki-tab" }, el("thead", {}, el("tr", {}, ...["", "TAK", "NIE", ""].map((t) => el("th", { textContent: t })))),
+    el("h3", { textContent: `Debate ${d.nr}` }),
+    el("table", { className: "wyniki-tab" }, el("thead", {}, el("tr", {}, ...["", "YES", "NO", ""].map((t) => el("th", { textContent: t })))),
       el("tbody", {}, wierszRecznegoWyniku(d.nr, "przed"), wierszRecznegoWyniku(d.nr, "po"))),
     liniaZwyciezcy(d.nr),
   ]);
-  return [el("p", { className: "mala", textContent: "Wyniki zapisują się na tablecie i na obu serwerach. Liczby z głosowania wpadają tu po „Zapisz wynik”. Ręcznie popraw tylko, gdy trzeba." }),
+  return [el("p", { className: "mala", textContent: "Results are saved on the tablet and on both servers. Vote numbers land here after \"Save result\". Correct them by hand only if needed." }),
     ...tabele, sekcjaPliku(), sekcjaSesji()];
 }
-
-let kluczPanelu = "";
 
 /* Panel przerysowuje się tylko, gdy zmieni się jego treść: nie gubi wpisywanych liczb ani podglądu pliku. */
 function rysujPanel(wymus = false) {
@@ -1136,24 +1207,25 @@ function rysujPanel(wymus = false) {
 /* Tablet prowadzącego: fazy, timer z dźwiękami, sterowanie głosowaniem. Panele boczne: prowadzacy_panele.js. */
 const KLUCZ_STANU = "debaty-prowadzacy-stan-v1";
 const KLUCZ_GLOSOW = "debaty-prowadzacy-glosy-v1";
-const EKRANY = ["Wstęp", "Debata 1", "Debata 2", "Debata 3", "Koniec"];
+const KLUCZ_DZWIEKU = "debaty-prowadzacy-dzwiek-v1";
+const EKRANY = ["Opening", "Debate 1", "Debate 2", "Debate 3", "Closing"];
 
 let stan = wybierzNowszy(nowyStan(), czytajLokalnie(KLUCZ_STANU, null));
 let glosy = czytajLokalnie(KLUCZ_GLOSOW, {});
+let dzwiekNaTablecie = czytajLokalnie(KLUCZ_DZWIEKU, true);
 const obecni = {};
 let potwierdzonyRev = null;
 let poprzednioPozostalo = null;
 
-function fazyEkranu(nr) {
-  if (nr === 0) return WSTEP;
-  if (nr === 4) return ZAKONCZENIE;
-  const debata = DEBATY[nr - 1];
-  return FAZY_DEBATY.map((faza, i) => (i === 0 ? { ...faza, mowisz: `${debata.wejscie}\n\n${faza.mowisz}` } : faza));
+function biezacaFaza() {
+  return fazaStanu(stan);
 }
 
-function biezacaFaza() {
-  const fazy = fazyEkranu(stan.ekran.debata);
-  return fazy[Math.min(stan.ekran.faza, fazy.length - 1)];
+function wyslijStan() {
+  const rev = stan.rev;
+  lacze.publikuj("stan", stan)
+    .then(() => { potwierdzonyRev = Math.max(potwierdzonyRev || 0, rev); rysujPasek(); })
+    .catch((blad) => console.warn("Serwer nie przyjął stanu", blad));
 }
 
 function ustaw(nowy) {
@@ -1183,46 +1255,37 @@ function naWiadomosc(temat, dane) {
 }
 
 let statusLacza = { polaczone: 0, wszystkie: 2 };
+/* Po (ponownym) połączeniu odnawiamy stan na serwerach, gdyby któryś go zgubił. Odczekujemy,
+   aż przyjdzie zachowany stan z serwera, żeby nie nadpisać nowszego starszym. */
 const lacze = polaczLacze({
   subskrypcje: ["stan", "glos/#", "obecni/#"],
   naWiadomosc,
   naStatus: (s) => {
     const dolaczyl = s.polaczone > statusLacza.polaczone;
     statusLacza = s;
-    if (dolaczyl) setTimeout(odnowStanNaSerwerze, 2500);
+    if (dolaczyl) setTimeout(wyslijStan, 2500);
     rysujPasek();
   },
 });
-
-/* Po (ponownym) połączeniu odnawiamy stan na serwerach, gdyby któryś go zgubił. Odczekujemy,
-   aż przyjdzie zachowany stan z serwera, żeby nie nadpisać nowszego starszym. */
-function wyslijStan() {
-  const rev = stan.rev;
-  lacze.publikuj("stan", stan)
-    .then(() => { potwierdzonyRev = Math.max(potwierdzonyRev || 0, rev); rysujPasek(); })
-    .catch((blad) => console.warn("Serwer nie przyjął stanu", blad));
-}
-
-function odnowStanNaSerwerze() {
-  wyslijStan();
-}
 
 function rysujPasek() {
   const { polaczone, wszystkie } = statusLacza;
   const wskaznik = document.getElementById("lacze");
   wskaznik.className = `lacze ${polaczone === wszystkie ? "ok" : polaczone ? "czesc" : ""}`;
-  const zapis = potwierdzonyRev === stan.rev ? "zapisane" : "zapisuję…";
-  wskaznik.textContent = polaczone ? `serwery ${polaczone}/${wszystkie} · ${zapis}` : "brak połączenia, zapis na tablecie";
+  const zapis = potwierdzonyRev === stan.rev ? "saved" : "saving…";
+  wskaznik.textContent = polaczone ? `servers ${polaczone}/${wszystkie} · ${zapis}` : "offline, saved on tablet";
   const grupy = Object.values(obecni);
   const ile = (g) => grupy.filter((x) => x === g).length;
-  document.getElementById("obecni").textContent = `Telefony: ${grupy.length} (gr. 1: ${ile(1)}, gr. 2: ${ile(2)})`;
+  document.getElementById("obecni").textContent = `Phones: ${grupy.length} (G1: ${ile(1)}, G2: ${ile(2)})`;
 }
 
 function rysujEkrany() {
   const przyciski = EKRANY.map((nazwa, nr) => {
     const p = el("button", { type: "button", textContent: nazwa });
     p.setAttribute("aria-pressed", String(stan.ekran.debata === nr));
-    p.addEventListener("click", () => ustaw(zmien(stan, Date.now(), (s) => { s.ekran = { debata: nr, faza: 0 }; })));
+    p.addEventListener("click", () => {
+      if (stan.ekran.debata !== nr) ustaw(zmien(zatrzymajTimer(stan, Date.now()), Date.now(), (s) => { s.ekran = { debata: nr, faza: 0 }; }));
+    });
     return p;
   });
   wstaw(document.getElementById("ekrany"), ...przyciski);
@@ -1231,12 +1294,12 @@ function rysujEkrany() {
 function idzDoFazy(faza) {
   const ile = fazyEkranu(stan.ekran.debata).length;
   if (faza < 0 || faza >= ile) return;
-  ustaw(zmien(stan, Date.now(), (s) => { s.ekran.faza = faza; }));
+  /* Nowa faza = timer od zera, żeby dogrywka poprzedniego mówcy nie wisiała na telewizorze. */
+  ustaw(zmien(zatrzymajTimer(stan, Date.now()), Date.now(), (s) => { s.ekran.faza = faza; }));
 }
 
 function rysujFazy() {
-  const fazy = fazyEkranu(stan.ekran.debata);
-  const przyciski = fazy.map((faza, i) => {
+  const przyciski = fazyEkranu(stan.ekran.debata).map((faza, i) => {
     const p = el("button", { type: "button", textContent: `${i + 1}. ${faza.nazwa}`, role: "listitem" });
     if (i === stan.ekran.faza) p.setAttribute("aria-current", "step");
     p.addEventListener("click", () => idzDoFazy(i));
@@ -1249,7 +1312,7 @@ function opisMowcy(faza) {
   if (!faza.kto || !stan.ekran.debata || stan.ekran.debata > 3) return null;
   const debata = DEBATY[stan.ekran.debata - 1];
   const grupa = faza.kto === "tak" ? debata.tak : debata.nie;
-  return el("p", { className: `strona-${faza.kto}`, textContent: `Mówi strona ${faza.kto.toUpperCase()}: grupa ${grupa}` });
+  return el("p", { className: `strona-${faza.kto}`, textContent: `Speaking: ${faza.kto === "tak" ? "YES" : "NO"} side, group ${grupa}` });
 }
 
 function rysujFaze() {
@@ -1257,12 +1320,12 @@ function rysujFaze() {
   const fazy = fazyEkranu(stan.ekran.debata);
   const nr = stan.ekran.debata;
   const debata = nr >= 1 && nr <= 3 ? DEBATY[nr - 1] : null;
-  const wstecz = el("button", { className: "przycisk", type: "button", textContent: "← Wstecz", disabled: stan.ekran.faza === 0 });
-  const dalej = el("button", { className: "przycisk glowny", type: "button", textContent: "Dalej →", disabled: stan.ekran.faza >= fazy.length - 1 });
+  const wstecz = el("button", { className: "przycisk", type: "button", textContent: "← Back", disabled: stan.ekran.faza === 0 });
+  const dalej = el("button", { className: "przycisk glowny", type: "button", textContent: "Next →", disabled: stan.ekran.faza >= fazy.length - 1 });
   wstecz.addEventListener("click", () => idzDoFazy(stan.ekran.faza - 1));
   dalej.addEventListener("click", () => idzDoFazy(stan.ekran.faza + 1));
-  wstaw(document.getElementById("faza"), 
-    debata ? el("p", { className: "etykieta", textContent: `${EKRANY[nr]} · ${debata.pytanie}` }) : el("p", { className: "etykieta", textContent: EKRANY[nr] }),
+  wstaw(document.getElementById("faza"),
+    el("p", { className: "etykieta", textContent: debata ? `${EKRANY[nr]} · ${debata.pytanie}` : EKRANY[nr] }),
     el("div", { className: "faza-naglowek" }, el("h2", { textContent: faza.nazwa }),
       faza.czas ? el("span", { className: "mala", textContent: `${formatCzasu(faza.czas * 1000)} min` }) : null),
     opisMowcy(faza),
@@ -1277,36 +1340,48 @@ function przyciskTimera(tekst, akcja, klasa = "przycisk") {
   return p;
 }
 
-function rysujTimer() {
-  const faza = biezacaFaza();
-  const t = stan.timer;
-  const czasFazy = faza.czas || 120;
-  const etykieta = [faza.nazwa, faza.kto && stan.ekran.debata <= 3 ? `strona ${faza.kto.toUpperCase()}` : ""].filter(Boolean).join(" · ");
-  const sterowanie = t.stan === "biegnie"
-    ? [przyciskTimera("Pauza", (n) => pauzaTimer(stan, n), "przycisk glowny")]
-    : t.stan === "pauza"
-      ? [przyciskTimera("Wznów", (n) => wznowTimer(stan, n), "przycisk glowny")]
-      : [przyciskTimera(`Start ${formatCzasu(czasFazy * 1000)}`, (n) => startTimer(stan, { czas: czasFazy, etykieta, kto: faza.kto }, n), "przycisk glowny")];
-  const test = el("button", { className: "przycisk", type: "button", textContent: "Test dźwięku" });
+function przyciskiDzwieku() {
+  const test = el("button", { className: "przycisk", type: "button", textContent: "Test sound" });
   test.addEventListener("click", () => {
     odblokujDzwieki();
     setTimeout(() => zagraj("ostrzezenie").catch((b) => console.warn(b)), 300);
     setTimeout(() => zagraj("koniec").catch((b) => console.warn(b)), 1500);
   });
-  wstaw(document.getElementById("timer"), 
+  const przelacz = el("button", { className: "przycisk", type: "button", textContent: dzwiekNaTablecie ? "Tablet sound: on" : "Tablet sound: off" });
+  przelacz.addEventListener("click", () => {
+    dzwiekNaTablecie = !dzwiekNaTablecie;
+    zapiszLokalnie(KLUCZ_DZWIEKU, dzwiekNaTablecie);
+    rysujTimer();
+  });
+  return [test, przelacz];
+}
+
+function rysujTimer() {
+  const faza = biezacaFaza();
+  const t = stan.timer;
+  const czasFazy = faza.czas || 120;
+  const strona = faza.kto && stan.ekran.debata <= 3 ? `${faza.kto === "tak" ? "YES" : "NO"} side` : "";
+  const etykieta = [faza.nazwa, strona].filter(Boolean).join(" · ");
+  const ustawienia = (czas) => ({ czas, etykieta, kto: faza.kto });
+  const glowny = t.stan === "biegnie"
+    ? przyciskTimera("Pause", (n) => pauzaTimer(stan, n), "przycisk glowny")
+    : t.stan === "pauza"
+      ? przyciskTimera("Resume", (n) => wznowTimer(stan, n), "przycisk glowny")
+      : przyciskTimera(`Start ${formatCzasu(czasFazy * 1000)}`, (n) => startTimer(stan, ustawienia(czasFazy), n), "przycisk glowny");
+  wstaw(document.getElementById("timer"),
     el("div", { className: "cyfry", id: "cyfry" }),
     el("div", {},
-      el("p", { className: "opis-timera", textContent: t.stan === "stop" ? `Gotowy: ${etykieta}` : t.etykieta }),
-      el("div", { className: "rzad" }, ...sterowanie,
+      el("p", { className: "opis-timera", textContent: t.stan === "stop" ? `Ready: ${etykieta}` : t.etykieta }),
+      el("div", { className: "rzad" }, glowny,
         przyciskTimera("Stop", (n) => zatrzymajTimer(stan, n)),
         przyciskTimera("+30 s", (n) => dodajCzas(stan, 30, n)),
-        przyciskTimera("1:00", (n) => startTimer(stan, { czas: 60, etykieta, kto: faza.kto }, n)),
-        przyciskTimera("2:00", (n) => startTimer(stan, { czas: 120, etykieta, kto: faza.kto }, n)),
-        test)));
+        przyciskTimera("1:00", (n) => startTimer(stan, ustawienia(60), n)),
+        przyciskTimera("2:00", (n) => startTimer(stan, ustawienia(120), n)),
+        ...przyciskiDzwieku())));
   tykniecie();
 }
 
-/* Co 200 ms: cyfry, kolor i dźwięki. Dźwięki gra tylko tablet, telefony pokazują sam czas. */
+/* Co 200 ms: cyfry, kolor i dźwięki. Telefony pokazują sam czas, dźwięk gra tablet i (po włączeniu) telewizor. */
 function tykniecie() {
   const t = stan.timer;
   const teraz = t.stan === "stop" ? (biezacaFaza().czas || 120) * 1000 : pozostalo(t, Date.now());
@@ -1315,7 +1390,7 @@ function tykniecie() {
   const karta = document.getElementById("timer");
   karta.classList.toggle("malo", t.stan !== "stop" && teraz <= 30000 && teraz > 0);
   karta.classList.toggle("koniec", t.stan !== "stop" && teraz <= 0);
-  if (t.stan === "biegnie" && poprzednioPozostalo !== null) {
+  if (dzwiekNaTablecie && t.stan === "biegnie" && poprzednioPozostalo !== null) {
     for (const zdarzenie of zdarzeniaTimera(poprzednioPozostalo, teraz, t.czas)) {
       zagraj(zdarzenie).catch((blad) => console.warn("Nie zagrał dźwięk", blad));
     }
@@ -1335,6 +1410,7 @@ function rysuj() {
 }
 
 document.addEventListener("click", odblokujDzwieki, { once: true });
+pokazBanerTestu("TEST MODE · separate channel · results go to the test Dropbox folder");
 trzymajEkran();
 rysuj();
 
