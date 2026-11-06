@@ -443,6 +443,7 @@ function zamknijIZapisz(stan, liczby, teraz) {
     s.glosowanie.otwarte = false;
     s.glosowanie.zamknieto = teraz;
     s.wyniki[g.debata][g.runda] = { tak: liczby.tak, nie: liczby.nie, zapisano: teraz, zrodlo: g.id };
+    s.wyniki[g.debata].prezydium = null;
   });
 }
 
@@ -455,7 +456,10 @@ function dopiszSpoznione(stan, idGlosu, liczby, teraz) {
   const w = stan.wyniki[g.debata][g.runda];
   if (!w || w.zrodlo !== idGlosu || liczby.razem < w.tak + w.nie) return stan;
   if (w.tak === liczby.tak && w.nie === liczby.nie) return stan;
-  return zmien(stan, teraz, (s) => { s.wyniki[g.debata][g.runda] = { ...w, tak: liczby.tak, nie: liczby.nie }; });
+  return zmien(stan, teraz, (s) => {
+    s.wyniki[g.debata][g.runda] = { ...w, tak: liczby.tak, nie: liczby.nie };
+    s.wyniki[g.debata].prezydium = null;
+  });
 }
 
 /* Test i zajęcia mają osobną pamięć na urządzeniu, żeby stan próby nie trafił na zajęcia. */
@@ -490,16 +494,27 @@ function liczbaGlosow(wartosc) {
 function zapiszWynik(stan, debata, runda, liczby, teraz) {
   sprawdzRunde(debata, runda);
   const wynik = { tak: liczbaGlosow(liczby.tak), nie: liczbaGlosow(liczby.nie), zapisano: teraz };
-  return zmien(stan, teraz, (s) => { s.wyniki[debata][runda] = wynik; });
+  return zmien(stan, teraz, (s) => { s.wyniki[debata][runda] = wynik; s.wyniki[debata].prezydium = null; });
 }
 
-/* Zasada z scenariusza: patrzymy na TAK. Więcej niż przed = TAK, mniej = NIE, tyle samo = remis. */
+/* Zasada z scenariusza: patrzymy na TAK. Więcej niż przed = TAK, mniej = NIE, tyle samo = remis.
+   Remis rozstrzyga głos prezydium (nauczycieli), jeśli prowadzący go dodał. */
 function zwyciezca(wynikDebaty) {
   if (!wynikDebaty || !wynikDebaty.przed || !wynikDebaty.po) return null;
   const roznica = wynikDebaty.po.tak - wynikDebaty.przed.tak;
   if (roznica > 0) return { strona: "tak", przekonani: roznica };
   if (roznica < 0) return { strona: "nie", przekonani: -roznica };
+  if (wynikDebaty.prezydium === "tak" || wynikDebaty.prezydium === "nie") return { strona: wynikDebaty.prezydium, przekonani: 0, prezydium: true };
   return { strona: "remis", przekonani: 0 };
+}
+
+/* Głos prezydium wolno dodać tylko przy remisie; null go cofa. Każda zmiana liczb go kasuje. */
+function glosPrezydium(stan, debata, strona, teraz) {
+  if (strona !== null && strona !== "tak" && strona !== "nie") throw new RangeError(`Zła strona: ${strona}`);
+  const bezPrezydium = { ...stan.wyniki[debata], prezydium: null };
+  const z = zwyciezca(bezPrezydium);
+  if (strona !== null && (!z || z.strona !== "remis")) throw new RangeError(`Debata ${debata} nie ma remisu`);
+  return zmien(stan, teraz, (s) => { s.wyniki[debata].prezydium = strona; });
 }
 
 function stronaGrupy(debata, grupa) {
@@ -583,7 +598,7 @@ function formatCzasu(ms) {
 
 if (typeof module !== "undefined") {
   module.exports = { RUNDY, nowyStan, zmien, wybierzNowszy, idGlosowania, otworzGlosowanie, powtorzGlosowanie,
-    zamknijGlosowanie, zamknijIZapisz, dopiszSpoznione, kluczPamieci, przyjmijGlos, policz, zapiszWynik, zwyciezca, stronaGrupy, pozostalo,
+    zamknijGlosowanie, zamknijIZapisz, dopiszSpoznione, kluczPamieci, przyjmijGlos, policz, zapiszWynik, zwyciezca, glosPrezydium, stronaGrupy, pozostalo,
     startTimer, pauzaTimer, wznowTimer, zatrzymajTimer, zakonczTimer, czyDzwonekPrzewiniecia, dodajCzas, zdarzeniaTimera, formatCzasu };
 }
 

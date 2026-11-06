@@ -110,7 +110,8 @@ main.glosowanie-pierwsze #timer { order: 2; }
 .plik img { display: block; width: 100%; height: auto; border: 1px solid var(--line); margin-top: var(--s1); }
 .plik textarea { width: 100%; font: 14px/1.4 Arial, sans-serif; padding: 8px; border: 1px solid var(--mute); margin-top: var(--s1); }
 .podglad-wynikow { margin-bottom: var(--s3); }
-.podglad-wynikow td { font-size: 20px; font-weight: 700; }
+.podglad-wynikow td { font-size: 19px; font-weight: 700; white-space: nowrap; }
+.podglad-wynikow td:last-child { white-space: normal; }
 .krok { background: var(--tint); border: 1px solid var(--line); padding: 12px 16px; margin-top: 12px; }
 </style>
 </head>
@@ -477,6 +478,7 @@ function zamknijIZapisz(stan, liczby, teraz) {
     s.glosowanie.otwarte = false;
     s.glosowanie.zamknieto = teraz;
     s.wyniki[g.debata][g.runda] = { tak: liczby.tak, nie: liczby.nie, zapisano: teraz, zrodlo: g.id };
+    s.wyniki[g.debata].prezydium = null;
   });
 }
 
@@ -489,7 +491,10 @@ function dopiszSpoznione(stan, idGlosu, liczby, teraz) {
   const w = stan.wyniki[g.debata][g.runda];
   if (!w || w.zrodlo !== idGlosu || liczby.razem < w.tak + w.nie) return stan;
   if (w.tak === liczby.tak && w.nie === liczby.nie) return stan;
-  return zmien(stan, teraz, (s) => { s.wyniki[g.debata][g.runda] = { ...w, tak: liczby.tak, nie: liczby.nie }; });
+  return zmien(stan, teraz, (s) => {
+    s.wyniki[g.debata][g.runda] = { ...w, tak: liczby.tak, nie: liczby.nie };
+    s.wyniki[g.debata].prezydium = null;
+  });
 }
 
 /* Test i zajęcia mają osobną pamięć na urządzeniu, żeby stan próby nie trafił na zajęcia. */
@@ -524,16 +529,27 @@ function liczbaGlosow(wartosc) {
 function zapiszWynik(stan, debata, runda, liczby, teraz) {
   sprawdzRunde(debata, runda);
   const wynik = { tak: liczbaGlosow(liczby.tak), nie: liczbaGlosow(liczby.nie), zapisano: teraz };
-  return zmien(stan, teraz, (s) => { s.wyniki[debata][runda] = wynik; });
+  return zmien(stan, teraz, (s) => { s.wyniki[debata][runda] = wynik; s.wyniki[debata].prezydium = null; });
 }
 
-/* Zasada z scenariusza: patrzymy na TAK. Więcej niż przed = TAK, mniej = NIE, tyle samo = remis. */
+/* Zasada z scenariusza: patrzymy na TAK. Więcej niż przed = TAK, mniej = NIE, tyle samo = remis.
+   Remis rozstrzyga głos prezydium (nauczycieli), jeśli prowadzący go dodał. */
 function zwyciezca(wynikDebaty) {
   if (!wynikDebaty || !wynikDebaty.przed || !wynikDebaty.po) return null;
   const roznica = wynikDebaty.po.tak - wynikDebaty.przed.tak;
   if (roznica > 0) return { strona: "tak", przekonani: roznica };
   if (roznica < 0) return { strona: "nie", przekonani: -roznica };
+  if (wynikDebaty.prezydium === "tak" || wynikDebaty.prezydium === "nie") return { strona: wynikDebaty.prezydium, przekonani: 0, prezydium: true };
   return { strona: "remis", przekonani: 0 };
+}
+
+/* Głos prezydium wolno dodać tylko przy remisie; null go cofa. Każda zmiana liczb go kasuje. */
+function glosPrezydium(stan, debata, strona, teraz) {
+  if (strona !== null && strona !== "tak" && strona !== "nie") throw new RangeError(`Zła strona: ${strona}`);
+  const bezPrezydium = { ...stan.wyniki[debata], prezydium: null };
+  const z = zwyciezca(bezPrezydium);
+  if (strona !== null && (!z || z.strona !== "remis")) throw new RangeError(`Debata ${debata} nie ma remisu`);
+  return zmien(stan, teraz, (s) => { s.wyniki[debata].prezydium = strona; });
 }
 
 function stronaGrupy(debata, grupa) {
@@ -617,7 +633,7 @@ function formatCzasu(ms) {
 
 if (typeof module !== "undefined") {
   module.exports = { RUNDY, nowyStan, zmien, wybierzNowszy, idGlosowania, otworzGlosowanie, powtorzGlosowanie,
-    zamknijGlosowanie, zamknijIZapisz, dopiszSpoznione, kluczPamieci, przyjmijGlos, policz, zapiszWynik, zwyciezca, stronaGrupy, pozostalo,
+    zamknijGlosowanie, zamknijIZapisz, dopiszSpoznione, kluczPamieci, przyjmijGlos, policz, zapiszWynik, zwyciezca, glosPrezydium, stronaGrupy, pozostalo,
     startTimer, pauzaTimer, wznowTimer, zatrzymajTimer, zakonczTimer, czyDzwonekPrzewiniecia, dodajCzas, zdarzeniaTimera, formatCzasu };
 }
 
@@ -770,6 +786,7 @@ function opisZwyciezcy(wynikDebaty) {
   const z = zwyciezca(wynikDebaty);
   if (!z) return "one or both votes missing";
   if (z.strona === "remis") return "tie";
+  if (z.prezydium) return `${NAZWY_STRON[z.strona]} wins on the teachers' casting vote (tie)`;
   return `${NAZWY_STRON[z.strona]} wins, changed ${z.przekonani} ${z.przekonani === 1 ? "mind" : "minds"}`;
 }
 
@@ -1004,12 +1021,32 @@ function opisWyniku(wynik) {
   return `YES ${wynik.tak}, NO ${wynik.nie} (saved ${godzina})`;
 }
 
+function tekstZwyciezcy(nr, z) {
+  const strona = z.strona === "tak" ? "YES" : "NO";
+  const grupa = DEBATY[nr - 1][z.strona];
+  if (z.prezydium) return `${strona} wins (group ${grupa}) on the teachers' casting vote.`;
+  return `${strona} wins (group ${grupa}), changed ${z.przekonani} ${z.przekonani === 1 ? "mind" : "minds"}.`;
+}
+
+/* Remis: prowadzący może dodać głos prezydium (nauczycieli), który rozstrzyga debatę. */
+function sterowaniePrezydium(nr, z) {
+  const glos = (strona, tekst) => przyciskGlosowania(tekst, `przycisk glowny`, () => ustaw(glosPrezydium(stan, nr, strona, Date.now())));
+  if (z.strona === "remis") {
+    return el("div", { className: "krok" },
+      el("p", { textContent: "It's a tie. Add the teachers' casting vote:" }),
+      el("div", { className: "rzad" }, glos("tak", "Teachers vote YES"), glos("nie", "Teachers vote NO")));
+  }
+  if (!z.prezydium) return null;
+  return el("div", { className: "rzad" }, przyciskGlosowania("Undo teachers' vote", "przycisk", () => ustaw(glosPrezydium(stan, nr, null, Date.now()))));
+}
+
 function liniaZwyciezcy(nr) {
   const z = zwyciezca(stan.wyniki[nr]);
   if (!z) return null;
-  const tekst = z.strona === "remis" ? "Tie: the same number of YES votes as before the debate."
-    : `${z.strona === "tak" ? "YES" : "NO"} wins (group ${DEBATY[nr - 1][z.strona]}), changed ${z.przekonani} ${z.przekonani === 1 ? "mind" : "minds"}.`;
-  return el("p", { className: `wygrany strona-${z.strona}`, textContent: tekst });
+  const linia = z.strona === "remis"
+    ? el("p", { className: "wygrany", textContent: "Tie: the same number of YES votes as before the debate." })
+    : el("p", { className: `wygrany strona-${z.strona}`, textContent: tekstZwyciezcy(nr, z) });
+  return el("div", {}, linia, sterowaniePrezydium(nr, z));
 }
 
 function przyciskGlosowania(tekst, klasa, akcja, wylaczony = false) {
