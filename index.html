@@ -409,21 +409,24 @@ function sprawdzRunde(debata, runda) {
   if (!RUNDY.includes(runda)) throw new RangeError(`Nie ma rundy ${runda}`);
 }
 
+/* Ten sam identyfikator dostaje tylko ponowne otwarcie głosowania, które właśnie było na ekranie
+   („Reopen”). Każde inne otwarcie to nowa próba z nowym identyfikatorem, więc głosy z wcześniejszych
+   prób (np. z poprzedniego przejścia tej samej debaty) nigdy się nie doliczą. */
 function otworzGlosowanie(stan, debata, runda, teraz) {
   sprawdzRunde(debata, runda);
+  const g = stan.glosowanie;
+  const ponowne = Boolean(g && g.debata === debata && g.runda === runda);
   return zmien(stan, teraz, (s) => {
     const klucz = `d${debata}-${runda}`;
-    s.proby[klucz] = s.proby[klucz] || 1;
-    s.glosowanie = { id: idGlosowania(s.sesja, debata, runda, s.proby[klucz]), debata, runda, otwarte: true };
+    if (!ponowne) s.proby[klucz] = (s.proby[klucz] || 0) + 1;
+    s.glosowanie = { id: ponowne ? g.id : idGlosowania(s.sesja, debata, runda, s.proby[klucz]), debata, runda, otwarte: true };
   });
 }
 
-/* Nowa próba = nowy identyfikator, więc stare głosy przestają się liczyć. */
+/* „Start over”: nowa próba = nowy identyfikator, więc stare głosy przestają się liczyć. */
 function powtorzGlosowanie(stan, debata, runda, teraz) {
   sprawdzRunde(debata, runda);
-  const klucz = `d${debata}-${runda}`;
-  const z = zmien(stan, teraz, (s) => { s.proby[klucz] = (s.proby[klucz] || 1) + 1; });
-  return otworzGlosowanie(z, debata, runda, teraz);
+  return otworzGlosowanie(zmien(stan, teraz, (s) => { s.glosowanie = null; }), debata, runda, teraz);
 }
 
 function zamknijGlosowanie(stan, teraz) {
