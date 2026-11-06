@@ -507,6 +507,7 @@ function stronaGrupy(debata, grupa) {
 function pozostalo(timer, teraz) {
   if (timer.stan === "biegnie") return timer.koniec - teraz;
   if (timer.stan === "pauza") return timer.pozostalo;
+  if (timer.stan === "koniec") return 0;
   return timer.czas * 1000;
 }
 
@@ -541,6 +542,17 @@ function zatrzymajTimer(stan, teraz) {
   return zmien(stan, teraz, (s) => { s.timer.stan = "stop"; s.timer.koniec = null; s.timer.pozostalo = null; });
 }
 
+/* Mówca skończył wcześniej: przewijamy do końca. Zegar staje na 0:00, telewizor gra dzwonek. */
+function zakonczTimer(stan, teraz) {
+  if (stan.timer.stan !== "biegnie" && stan.timer.stan !== "pauza") return stan;
+  return zmien(stan, teraz, (s) => { s.timer.stan = "koniec"; s.timer.koniec = null; s.timer.pozostalo = null; });
+}
+
+/* Dzwonek z przewinięcia: tylko gdy zegar dopiero co przeszedł w stan „koniec”. */
+function czyDzwonekPrzewiniecia(poprzedni, nowy) {
+  return Boolean(nowy && nowy.timer.stan === "koniec" && (!poprzedni || poprzedni.timer.stan !== "koniec"));
+}
+
 function dodajCzas(stan, sekundy, teraz) {
   return zmien(stan, teraz, (s) => {
     const t = s.timer;
@@ -569,7 +581,7 @@ function formatCzasu(ms) {
 if (typeof module !== "undefined") {
   module.exports = { RUNDY, nowyStan, zmien, wybierzNowszy, idGlosowania, otworzGlosowanie, powtorzGlosowanie,
     zamknijGlosowanie, zamknijIZapisz, dopiszSpoznione, kluczPamieci, przyjmijGlos, policz, zapiszWynik, zwyciezca, stronaGrupy, pozostalo,
-    startTimer, pauzaTimer, wznowTimer, zatrzymajTimer, dodajCzas, zdarzeniaTimera, formatCzasu };
+    startTimer, pauzaTimer, wznowTimer, zatrzymajTimer, zakonczTimer, czyDzwonekPrzewiniecia, dodajCzas, zdarzeniaTimera, formatCzasu };
 }
 
 ;

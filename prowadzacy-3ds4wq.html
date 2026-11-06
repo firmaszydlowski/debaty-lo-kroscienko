@@ -109,6 +109,8 @@ main.glosowanie-pierwsze #timer { order: 2; }
 .wyniki-tab input { width: 70px; min-height: 44px; font: inherit; font-size: 20px; padding: 4px 8px; border: 1px solid var(--mute); }
 .plik img { display: block; width: 100%; height: auto; border: 1px solid var(--line); margin-top: var(--s1); }
 .plik textarea { width: 100%; font: 14px/1.4 Arial, sans-serif; padding: 8px; border: 1px solid var(--mute); margin-top: var(--s1); }
+.podglad-wynikow { margin-bottom: var(--s3); }
+.podglad-wynikow td { font-size: 20px; font-weight: 700; }
 .krok { background: var(--tint); border: 1px solid var(--line); padding: 12px 16px; margin-top: 12px; }
 </style>
 </head>
@@ -539,6 +541,7 @@ function stronaGrupy(debata, grupa) {
 function pozostalo(timer, teraz) {
   if (timer.stan === "biegnie") return timer.koniec - teraz;
   if (timer.stan === "pauza") return timer.pozostalo;
+  if (timer.stan === "koniec") return 0;
   return timer.czas * 1000;
 }
 
@@ -573,6 +576,17 @@ function zatrzymajTimer(stan, teraz) {
   return zmien(stan, teraz, (s) => { s.timer.stan = "stop"; s.timer.koniec = null; s.timer.pozostalo = null; });
 }
 
+/* Mówca skończył wcześniej: przewijamy do końca. Zegar staje na 0:00, telewizor gra dzwonek. */
+function zakonczTimer(stan, teraz) {
+  if (stan.timer.stan !== "biegnie" && stan.timer.stan !== "pauza") return stan;
+  return zmien(stan, teraz, (s) => { s.timer.stan = "koniec"; s.timer.koniec = null; s.timer.pozostalo = null; });
+}
+
+/* Dzwonek z przewinięcia: tylko gdy zegar dopiero co przeszedł w stan „koniec”. */
+function czyDzwonekPrzewiniecia(poprzedni, nowy) {
+  return Boolean(nowy && nowy.timer.stan === "koniec" && (!poprzedni || poprzedni.timer.stan !== "koniec"));
+}
+
 function dodajCzas(stan, sekundy, teraz) {
   return zmien(stan, teraz, (s) => {
     const t = s.timer;
@@ -601,7 +615,7 @@ function formatCzasu(ms) {
 if (typeof module !== "undefined") {
   module.exports = { RUNDY, nowyStan, zmien, wybierzNowszy, idGlosowania, otworzGlosowanie, powtorzGlosowanie,
     zamknijGlosowanie, zamknijIZapisz, dopiszSpoznione, kluczPamieci, przyjmijGlos, policz, zapiszWynik, zwyciezca, stronaGrupy, pozostalo,
-    startTimer, pauzaTimer, wznowTimer, zatrzymajTimer, dodajCzas, zdarzeniaTimera, formatCzasu };
+    startTimer, pauzaTimer, wznowTimer, zatrzymajTimer, zakonczTimer, czyDzwonekPrzewiniecia, dodajCzas, zdarzeniaTimera, formatCzasu };
 }
 
 ;
@@ -1202,6 +1216,22 @@ function sekcjaSesji() {
   return el("div", { className: "krok" }, el("p", { className: "mala", textContent: `Session ${stan.sesja}. Use only after a rehearsal, before class.` }), nowa);
 }
 
+/* Podgląd na górze zakładki: to samo, co widzi sala, bez patrzenia na telewizor. */
+function podgladWynikow() {
+  const komorka = (w) => el("td", { className: "plain", textContent: w ? `${w.tak} – ${w.nie}` : "—" });
+  const wiersze = DEBATY.map((d) => {
+    const w = stan.wyniki[d.nr];
+    const z = zwyciezca(w);
+    return el("tr", {}, el("td", { textContent: String(d.nr) }), komorka(w.przed), komorka(w.po),
+      el("td", { className: z && z.strona !== "remis" ? `strona-${z.strona}` : "", textContent: z ? opisZwyciezcy(w) : "—" }));
+  });
+  return el("div", { className: "podglad-wynikow" },
+    el("h3", { textContent: "Overview (YES – NO)" }),
+    el("table", { className: "wyniki-tab" },
+      el("thead", {}, el("tr", {}, ...["Debate", "Before", "After", "Result"].map((t) => el("th", { textContent: t })))),
+      el("tbody", {}, ...wiersze)));
+}
+
 function panelWyniki() {
   const tabele = DEBATY.flatMap((d) => [
     el("h3", { textContent: `Debate ${d.nr}` }),
@@ -1209,7 +1239,7 @@ function panelWyniki() {
       el("tbody", {}, wierszRecznegoWyniku(d.nr, "przed"), wierszRecznegoWyniku(d.nr, "po"))),
     liniaZwyciezcy(d.nr),
   ]);
-  return [el("p", { className: "mala", textContent: "Results are saved on the tablet and on both servers. Vote numbers land here automatically when you close a vote. Correct them by hand only if needed." }),
+  return [podgladWynikow(), el("p", { className: "mala", textContent: "Results are saved on the tablet and on both servers. Vote numbers land here automatically when you close a vote. Correct them by hand only if needed." }),
     ...tabele, sekcjaPliku(), sekcjaSesji()];
 }
 
@@ -1258,6 +1288,7 @@ function wyslijStan() {
 
 function ustaw(nowy) {
   if (nowy === stan) return;
+  if (dzwiekNaTablecie && czyDzwonekPrzewiniecia(stan, nowy)) zagraj("koniec").catch((b) => console.warn("Nie zagrał dźwięk", b));
   stan = nowy;
   zapiszLokalnie(KLUCZ_STANU, stan);
   wyslijStan();
@@ -1404,11 +1435,13 @@ function rysujTimer() {
     : t.stan === "pauza"
       ? przyciskTimera("Resume", (n) => wznowTimer(stan, n), "przycisk glowny")
       : przyciskTimera(`Start ${formatCzasu(czasFazy * 1000)}`, (n) => startTimer(stan, ustawienia(czasFazy), n), "przycisk glowny");
+  const doKonca = przyciskTimera("End now ⏭", (n) => zakonczTimer(stan, n));
+  doKonca.disabled = t.stan !== "biegnie" && t.stan !== "pauza";
   wstaw(document.getElementById("timer"),
     el("div", { className: "cyfry", id: "cyfry" }),
     el("div", {},
       el("p", { className: "opis-timera", textContent: t.stan === "stop" ? `Ready: ${etykieta}` : t.etykieta }),
-      el("div", { className: "rzad" }, glowny,
+      el("div", { className: "rzad" }, glowny, doKonca,
         przyciskTimera("Stop", (n) => zatrzymajTimer(stan, n)),
         przyciskTimera("+30 s", (n) => dodajCzas(stan, 30, n)),
         przyciskTimera("1:00", (n) => startTimer(stan, ustawienia(60), n)),
