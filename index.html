@@ -609,7 +609,7 @@ if (typeof module !== "undefined") module.exports = { fazyEkranu, fazaStanu };
 const BROKERY = ["wss://broker.hivemq.com:8884/mqtt", "wss://broker.emqx.io:8084/mqtt"];
 /* Adres z ?test łączy się z osobnym kanałem: próby nie mieszają się z zajęciami.
    Po testach zbuduj.py ustawia TEST_DOZWOLONY na false i ?test przestaje działać. */
-const TEST_DOZWOLONY = true;
+const TEST_DOZWOLONY = false;
 const TRYB_TESTOWY = TEST_DOZWOLONY && new URLSearchParams(location.search).has("test");
 const PREFIKS = `pfdebaty-kr-6pnf86komr${TRYB_TESTOWY ? "-test" : ""}`;
 
