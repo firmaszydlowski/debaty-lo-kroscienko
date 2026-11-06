@@ -138,7 +138,7 @@ const DROPBOX_TESTOWY = "https://www.dropbox.com/request/d85kevt9737mkq3o0kah";
 
 const FAZY_DEBATY = [
   { id: "otwarcie", nazwa: "Opening and first vote", czas: 120, kto: null, glosowanie: "przed",
-    opis: "Give the debate number and read the motion. Open the vote, close it, save the result.",
+    opis: "Give the debate number and read the motion. Open the vote and close it: closing saves the result.",
     mowisz: "Before we start, let's vote on your phones. Speakers don't vote. Vote for what you really think, not for your team. Voting is open now. … Thank you, voting is closed. Yes: …, no: …." },
   { id: "tak1", nazwa: "First speaker YES", czas: 120, kto: "tak", glosowanie: null,
     opis: "Arguments 1 and 2.", mowisz: "The first speaker for yes, please. You have two minutes." },
@@ -155,14 +155,14 @@ const FAZY_DEBATY = [
     mowisz: "The second speaker for yes, please. Give us your third argument and answer one point from the other team." },
   { id: "nie2", nazwa: "Second speaker NO", czas: 120, kto: "nie", glosowanie: null,
     opis: "The same: argument 3 and an answer.", mowisz: "Thank you. The second speaker for no, please." },
-  { id: "sprawdzajacyTak", nazwa: "Fact-checker YES", czas: 90, kto: "tak", glosowanie: null,
+  { id: "sprawdzajacyTak", nazwa: "Fact-checker YES", czas: 120, kto: "tak", glosowanie: null,
     opis: "The YES team's fact-checker says whether any fact from the NO team didn't add up, and where they checked. Before the second vote, so it can change minds.",
-    mowisz: "Before we vote again, let's hear the fact-checkers. Yes team fact-checker: did anything the no team said not add up? Where did you check? You have a minute and a half." },
-  { id: "sprawdzajacyNie", nazwa: "Fact-checker NO", czas: 90, kto: "nie", glosowanie: null,
+    mowisz: "Before we vote again, let's hear the fact-checkers. Yes team fact-checker: did anything the no team said not add up? Where did you check? You have two minutes." },
+  { id: "sprawdzajacyNie", nazwa: "Fact-checker NO", czas: 120, kto: "nie", glosowanie: null,
     opis: "The NO team's fact-checker does the same for the YES team's facts.",
     mowisz: "Thank you. No team fact-checker: did anything the yes team said not add up? Where did you check?" },
   { id: "wynik", nazwa: "Second vote and result", czas: 120, kto: null, glosowanie: "po",
-    opis: "Open the second vote, close it, save it. Give both results and say who changed more minds. A big hand for both teams. The teacher stops the recording and photographs both sheets.",
+    opis: "Open the second vote and close it (closing saves the result). Give both results and say who changed more minds. A big hand for both teams. The teacher stops the recording and photographs both sheets.",
     mowisz: "Time for the second vote, on your phones again. You can change your mind. Voting is open now. … Voting is closed. Before the debate: yes …, no …. After the debate: yes …, no …. The … team changed … minds, so … wins. Thank you, everyone. Let's give both teams a big hand." },
 ];
 
@@ -385,6 +385,7 @@ if (typeof module !== "undefined") module.exports = { SLOWKA_PROWADZENIE, REAKCJ
 /* Stan debaty, głosy, timer i wyniki. Czyste funkcje bez DOM i sieci: testy w test_logika.js. */
 const RUNDY = ["przed", "po"];
 const OSTRZEZENIE_MS = 30000;
+const OKNO_SPOZNIONYCH_MS = 10000;
 
 function nowyStan() {
   return {
@@ -445,7 +446,36 @@ function powtorzGlosowanie(stan, debata, runda, teraz) {
 
 function zamknijGlosowanie(stan, teraz) {
   if (!stan.glosowanie) return stan;
-  return zmien(stan, teraz, (s) => { s.glosowanie.otwarte = false; });
+  return zmien(stan, teraz, (s) => { s.glosowanie.otwarte = false; s.glosowanie.zamknieto = teraz; });
+}
+
+/* Zamknięcie od razu zapisuje wynik: prowadzący nie musi pamiętać o osobnym kliknięciu.
+   zrodlo mówi, z którego głosowania pochodzą liczby; ręczna poprawka go nie ma. */
+function zamknijIZapisz(stan, liczby, teraz) {
+  const g = stan.glosowanie;
+  if (!g || !g.otwarte) return stan;
+  return zmien(stan, teraz, (s) => {
+    s.glosowanie.otwarte = false;
+    s.glosowanie.zamknieto = teraz;
+    s.wyniki[g.debata][g.runda] = { tak: liczby.tak, nie: liczby.nie, zapisano: teraz, zrodlo: g.id };
+  });
+}
+
+/* Głos wysłany tuż przed zamknięciem może dojść chwilę później. Przez kilka sekund po zamknięciu
+   dopisujemy go do zapisanego wyniku, ale tylko gdy suma nie maleje: odtwarzanie głosów po
+   odświeżeniu tabletu (liczby rosnące od zera) nie nadpisze pełnego wyniku. */
+function dopiszSpoznione(stan, idGlosu, liczby, teraz) {
+  const g = stan.glosowanie;
+  if (!g || g.otwarte || g.id !== idGlosu || !(teraz - g.zamknieto <= OKNO_SPOZNIONYCH_MS)) return stan;
+  const w = stan.wyniki[g.debata][g.runda];
+  if (!w || w.zrodlo !== idGlosu || liczby.razem < w.tak + w.nie) return stan;
+  if (w.tak === liczby.tak && w.nie === liczby.nie) return stan;
+  return zmien(stan, teraz, (s) => { s.wyniki[g.debata][g.runda] = { ...w, tak: liczby.tak, nie: liczby.nie }; });
+}
+
+/* Test i zajęcia mają osobną pamięć na urządzeniu, żeby stan próby nie trafił na zajęcia. */
+function kluczPamieci(nazwa, testowy) {
+  return `${nazwa}-${testowy ? "test" : "zajecia"}`;
 }
 
 function przyjmijGlos(glosy, idGlosu, urzadzenie, dane) {
@@ -556,7 +586,7 @@ function formatCzasu(ms) {
 
 if (typeof module !== "undefined") {
   module.exports = { RUNDY, nowyStan, zmien, wybierzNowszy, idGlosowania, otworzGlosowanie, powtorzGlosowanie,
-    zamknijGlosowanie, przyjmijGlos, policz, zapiszWynik, zwyciezca, stronaGrupy, pozostalo,
+    zamknijGlosowanie, zamknijIZapisz, dopiszSpoznione, kluczPamieci, przyjmijGlos, policz, zapiszWynik, zwyciezca, stronaGrupy, pozostalo,
     startTimer, pauzaTimer, wznowTimer, zatrzymajTimer, dodajCzas, zdarzeniaTimera, formatCzasu };
 }
 

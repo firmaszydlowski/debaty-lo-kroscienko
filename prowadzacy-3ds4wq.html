@@ -152,7 +152,7 @@ const DROPBOX_TESTOWY = "https://www.dropbox.com/request/d85kevt9737mkq3o0kah";
 
 const FAZY_DEBATY = [
   { id: "otwarcie", nazwa: "Opening and first vote", czas: 120, kto: null, glosowanie: "przed",
-    opis: "Give the debate number and read the motion. Open the vote, close it, save the result.",
+    opis: "Give the debate number and read the motion. Open the vote and close it: closing saves the result.",
     mowisz: "Before we start, let's vote on your phones. Speakers don't vote. Vote for what you really think, not for your team. Voting is open now. … Thank you, voting is closed. Yes: …, no: …." },
   { id: "tak1", nazwa: "First speaker YES", czas: 120, kto: "tak", glosowanie: null,
     opis: "Arguments 1 and 2.", mowisz: "The first speaker for yes, please. You have two minutes." },
@@ -169,14 +169,14 @@ const FAZY_DEBATY = [
     mowisz: "The second speaker for yes, please. Give us your third argument and answer one point from the other team." },
   { id: "nie2", nazwa: "Second speaker NO", czas: 120, kto: "nie", glosowanie: null,
     opis: "The same: argument 3 and an answer.", mowisz: "Thank you. The second speaker for no, please." },
-  { id: "sprawdzajacyTak", nazwa: "Fact-checker YES", czas: 90, kto: "tak", glosowanie: null,
+  { id: "sprawdzajacyTak", nazwa: "Fact-checker YES", czas: 120, kto: "tak", glosowanie: null,
     opis: "The YES team's fact-checker says whether any fact from the NO team didn't add up, and where they checked. Before the second vote, so it can change minds.",
-    mowisz: "Before we vote again, let's hear the fact-checkers. Yes team fact-checker: did anything the no team said not add up? Where did you check? You have a minute and a half." },
-  { id: "sprawdzajacyNie", nazwa: "Fact-checker NO", czas: 90, kto: "nie", glosowanie: null,
+    mowisz: "Before we vote again, let's hear the fact-checkers. Yes team fact-checker: did anything the no team said not add up? Where did you check? You have two minutes." },
+  { id: "sprawdzajacyNie", nazwa: "Fact-checker NO", czas: 120, kto: "nie", glosowanie: null,
     opis: "The NO team's fact-checker does the same for the YES team's facts.",
     mowisz: "Thank you. No team fact-checker: did anything the yes team said not add up? Where did you check?" },
   { id: "wynik", nazwa: "Second vote and result", czas: 120, kto: null, glosowanie: "po",
-    opis: "Open the second vote, close it, save it. Give both results and say who changed more minds. A big hand for both teams. The teacher stops the recording and photographs both sheets.",
+    opis: "Open the second vote and close it (closing saves the result). Give both results and say who changed more minds. A big hand for both teams. The teacher stops the recording and photographs both sheets.",
     mowisz: "Time for the second vote, on your phones again. You can change your mind. Voting is open now. … Voting is closed. Before the debate: yes …, no …. After the debate: yes …, no …. The … team changed … minds, so … wins. Thank you, everyone. Let's give both teams a big hand." },
 ];
 
@@ -399,6 +399,7 @@ if (typeof module !== "undefined") module.exports = { SLOWKA_PROWADZENIE, REAKCJ
 /* Stan debaty, głosy, timer i wyniki. Czyste funkcje bez DOM i sieci: testy w test_logika.js. */
 const RUNDY = ["przed", "po"];
 const OSTRZEZENIE_MS = 30000;
+const OKNO_SPOZNIONYCH_MS = 10000;
 
 function nowyStan() {
   return {
@@ -459,7 +460,36 @@ function powtorzGlosowanie(stan, debata, runda, teraz) {
 
 function zamknijGlosowanie(stan, teraz) {
   if (!stan.glosowanie) return stan;
-  return zmien(stan, teraz, (s) => { s.glosowanie.otwarte = false; });
+  return zmien(stan, teraz, (s) => { s.glosowanie.otwarte = false; s.glosowanie.zamknieto = teraz; });
+}
+
+/* Zamknięcie od razu zapisuje wynik: prowadzący nie musi pamiętać o osobnym kliknięciu.
+   zrodlo mówi, z którego głosowania pochodzą liczby; ręczna poprawka go nie ma. */
+function zamknijIZapisz(stan, liczby, teraz) {
+  const g = stan.glosowanie;
+  if (!g || !g.otwarte) return stan;
+  return zmien(stan, teraz, (s) => {
+    s.glosowanie.otwarte = false;
+    s.glosowanie.zamknieto = teraz;
+    s.wyniki[g.debata][g.runda] = { tak: liczby.tak, nie: liczby.nie, zapisano: teraz, zrodlo: g.id };
+  });
+}
+
+/* Głos wysłany tuż przed zamknięciem może dojść chwilę później. Przez kilka sekund po zamknięciu
+   dopisujemy go do zapisanego wyniku, ale tylko gdy suma nie maleje: odtwarzanie głosów po
+   odświeżeniu tabletu (liczby rosnące od zera) nie nadpisze pełnego wyniku. */
+function dopiszSpoznione(stan, idGlosu, liczby, teraz) {
+  const g = stan.glosowanie;
+  if (!g || g.otwarte || g.id !== idGlosu || !(teraz - g.zamknieto <= OKNO_SPOZNIONYCH_MS)) return stan;
+  const w = stan.wyniki[g.debata][g.runda];
+  if (!w || w.zrodlo !== idGlosu || liczby.razem < w.tak + w.nie) return stan;
+  if (w.tak === liczby.tak && w.nie === liczby.nie) return stan;
+  return zmien(stan, teraz, (s) => { s.wyniki[g.debata][g.runda] = { ...w, tak: liczby.tak, nie: liczby.nie }; });
+}
+
+/* Test i zajęcia mają osobną pamięć na urządzeniu, żeby stan próby nie trafił na zajęcia. */
+function kluczPamieci(nazwa, testowy) {
+  return `${nazwa}-${testowy ? "test" : "zajecia"}`;
 }
 
 function przyjmijGlos(glosy, idGlosu, urzadzenie, dane) {
@@ -570,7 +600,7 @@ function formatCzasu(ms) {
 
 if (typeof module !== "undefined") {
   module.exports = { RUNDY, nowyStan, zmien, wybierzNowszy, idGlosowania, otworzGlosowanie, powtorzGlosowanie,
-    zamknijGlosowanie, przyjmijGlos, policz, zapiszWynik, zwyciezca, stronaGrupy, pozostalo,
+    zamknijGlosowanie, zamknijIZapisz, dopiszSpoznione, kluczPamieci, przyjmijGlos, policz, zapiszWynik, zwyciezca, stronaGrupy, pozostalo,
     startTimer, pauzaTimer, wznowTimer, zatrzymajTimer, dodajCzas, zdarzeniaTimera, formatCzasu };
 }
 
@@ -971,16 +1001,10 @@ function przyciskGlosowania(tekst, klasa, akcja, wylaczony = false) {
   return p;
 }
 
-function zapiszZGlosowania(debata, runda, liczby) {
-  const poprzedni = stan.wyniki[debata][runda];
-  if (poprzedni && !confirm(`Overwrite the saved result (${opisWyniku(poprzedni)})?`)) return;
-  ustaw(zapiszWynik(stan, debata, runda, liczby, Date.now()));
-}
-
 function ostrzezenieSumy(liczby, zamkniete) {
   if (!zamkniete || liczby.razem === OCZEKIWANYCH_GLOSOW) return null;
   return el("p", { className: "komunikat uwaga",
-    textContent: `There are ${liczby.razem} votes, there should be ${OCZEKIWANYCH_GLOSOW}. Repeat the vote or correct the numbers in the Results tab.` });
+    textContent: `${liczby.razem === 1 ? "There is 1 vote" : `There are ${liczby.razem} votes`}, there should be ${OCZEKIWANYCH_GLOSOW}. The result is saved anyway. Start over, or correct the numbers in the Results tab.` });
 }
 
 function kartaInnegoGlosowania(g) {
@@ -988,7 +1012,7 @@ function kartaInnegoGlosowania(g) {
   return [
     el("h2", { textContent: "A vote is still open" }),
     el("p", { textContent: `Debate ${g.debata}, ${NAZWY_RUND[g.runda]}: YES ${liczby.tak}, NO ${liczby.nie}.` }),
-    el("div", { className: "rzad" }, przyciskGlosowania("Close vote", "przycisk glowny", () => ustaw(zamknijGlosowanie(stan, Date.now())))),
+    el("div", { className: "rzad" }, przyciskGlosowania("Close vote and save", "przycisk glowny", () => ustaw(zamknijIZapisz(stan, liczby, Date.now())))),
   ];
 }
 
@@ -1032,9 +1056,8 @@ function rysujGlosowanie() {
     ostrzezenieSumy(liczby, biezace && !otwarte),
     el("div", { className: "rzad" },
       otwarte
-        ? przyciskGlosowania("Close vote", "przycisk glowny", () => ustaw(zamknijGlosowanie(stan, teraz())))
+        ? przyciskGlosowania("Close vote and save", "przycisk glowny", () => ustaw(zamknijIZapisz(stan, policz(glosy, biezace.id), teraz())))
         : przyciskGlosowania(biezace ? "Reopen" : "Open vote", "przycisk glowny", () => ustaw(otworzGlosowanie(stan, debata, runda, teraz()))),
-      przyciskGlosowania("Save result", "przycisk glowny", () => zapiszZGlosowania(debata, runda, liczby), !biezace || otwarte),
       przyciskGlosowania("Start over", "przycisk ostrozny", () => {
         if (confirm("Votes from this vote will no longer count and everyone votes again. Start over?")) ustaw(powtorzGlosowanie(stan, debata, runda, teraz()));
       }, !biezace),
@@ -1047,7 +1070,7 @@ function rysujGlosowanie() {
 ;
 /* Panel boczny tabletu: ściąga faktów, słówka, wyniki z plikiem dla szkoły. */
 const ZAKLADKI = [["sciaga", "Cheat sheet"], ["slowka", "Vocabulary"], ["wyniki", "Results"]];
-const KLUCZ_ARCHIWUM = "debaty-prowadzacy-archiwum-v1";
+const KLUCZ_ARCHIWUM = kluczPamieci("debaty-prowadzacy-archiwum-v2", TRYB_TESTOWY);
 let zakladka = "sciaga";
 let plikWynikow = null;
 let kluczPanelu = "";
@@ -1186,7 +1209,7 @@ function panelWyniki() {
       el("tbody", {}, wierszRecznegoWyniku(d.nr, "przed"), wierszRecznegoWyniku(d.nr, "po"))),
     liniaZwyciezcy(d.nr),
   ]);
-  return [el("p", { className: "mala", textContent: "Results are saved on the tablet and on both servers. Vote numbers land here after \"Save result\". Correct them by hand only if needed." }),
+  return [el("p", { className: "mala", textContent: "Results are saved on the tablet and on both servers. Vote numbers land here automatically when you close a vote. Correct them by hand only if needed." }),
     ...tabele, sekcjaPliku(), sekcjaSesji()];
 }
 
@@ -1208,8 +1231,8 @@ function rysujPanel(wymus = false) {
 
 ;
 /* Tablet prowadzącego: fazy, timer z dźwiękami, sterowanie głosowaniem. Panele boczne: prowadzacy_panele.js. */
-const KLUCZ_STANU = "debaty-prowadzacy-stan-v1";
-const KLUCZ_GLOSOW = "debaty-prowadzacy-glosy-v1";
+const KLUCZ_STANU = kluczPamieci("debaty-prowadzacy-stan-v2", TRYB_TESTOWY);
+const KLUCZ_GLOSOW = kluczPamieci("debaty-prowadzacy-glosy-v2", TRYB_TESTOWY);
 const KLUCZ_DZWIEKU = "debaty-prowadzacy-dzwiek-v2";
 const EKRANY = ["Opening", "Debate 1", "Debate 2", "Debate 3", "Closing"];
 
@@ -1251,7 +1274,9 @@ function naWiadomosc(temat, dane) {
   if (rodzaj === "glos" && a && b) {
     glosy = przyjmijGlos(glosy, a, b, dane);
     zapiszLokalnie(KLUCZ_GLOSOW, glosy);
-    rysujGlosowanie();
+    const poSpoznionym = dopiszSpoznione(stan, a, policz(glosy, a), Date.now());
+    if (poSpoznionym !== stan) ustaw(poSpoznionym);
+    else rysujGlosowanie();
   } else if (rodzaj === "tv") {
     statusTv = dane;
     rysujPasek();
