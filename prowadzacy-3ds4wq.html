@@ -169,12 +169,15 @@ const FAZY_DEBATY = [
     mowisz: "The second speaker for yes, please. Give us your third argument and answer one point from the other team." },
   { id: "nie2", nazwa: "Second speaker NO", czas: 120, kto: "nie", glosowanie: null,
     opis: "The same: argument 3 and an answer.", mowisz: "Thank you. The second speaker for no, please." },
+  { id: "sprawdzajacyTak", nazwa: "Fact-checker YES", czas: 90, kto: "tak", glosowanie: null,
+    opis: "The YES team's fact-checker says whether any fact from the NO team didn't add up, and where they checked. Before the second vote, so it can change minds.",
+    mowisz: "Before we vote again, let's hear the fact-checkers. Yes team fact-checker: did anything the no team said not add up? Where did you check? You have a minute and a half." },
+  { id: "sprawdzajacyNie", nazwa: "Fact-checker NO", czas: 90, kto: "nie", glosowanie: null,
+    opis: "The NO team's fact-checker does the same for the YES team's facts.",
+    mowisz: "Thank you. No team fact-checker: did anything the yes team said not add up? Where did you check?" },
   { id: "wynik", nazwa: "Second vote and result", czas: 120, kto: null, glosowanie: "po",
-    opis: "Open the second vote, close it, save it. Give both results and say who changed more minds.",
-    mowisz: "Time for the second vote, on your phones again. You can change your mind. Voting is open now. … Voting is closed. Before the debate: yes …, no …. After the debate: yes …, no …. The … team changed … minds, so … wins." },
-  { id: "sprawdzajacy", nazwa: "Fact-checkers", czas: 180, kto: null, glosowanie: null,
-    opis: "Fact-checkers say whether any fact didn't add up. A big hand for both teams. The teacher stops the recording and photographs both sheets.",
-    mowisz: "Fact-checkers, did anything not add up? Thank you, everyone. Let's give both teams a big hand." },
+    opis: "Open the second vote, close it, save it. Give both results and say who changed more minds. A big hand for both teams. The teacher stops the recording and photographs both sheets.",
+    mowisz: "Time for the second vote, on your phones again. You can change your mind. Voting is open now. … Voting is closed. Before the debate: yes …, no …. After the debate: yes …, no …. The … team changed … minds, so … wins. Thank you, everyone. Let's give both teams a big hand." },
 ];
 
 const DEBATY = [
@@ -280,9 +283,9 @@ const DEBATY = [
 /* Opening and closing: text from otwarcie-en.html, to be read out. */
 const WSTEP = [
   { nazwa: "Welcome", mowisz: "Good morning, everyone, and welcome. Today we are going to hold three debates, all of them in English. Each debate starts with a simple question that you can answer with yes or no.\n\nYou are in two teams, and your team stays the same for all three debates. Only your side changes. You didn't choose your side, it was given to you. So some of you will have to defend an idea you don't agree with. That's the whole point. Today we are not checking who is right. We are checking who can convince the room." },
-  { nazwa: "How it works", mowisz: "Every debate has four speakers, two from each team. The speakers change every time, so by the end of the day twelve of you will have spoken. The yes team always goes first.\n\nEach speaker has two minutes. I'll let you know when you have thirty seconds left. When your time is up, please finish your sentence and stop there.\n\nAfter the first two speeches, each team asks the other team two questions. Then you get one minute to talk in your team, and the second speakers answer one point from the other side." },
+  { nazwa: "How it works", mowisz: "Every debate has four speakers, two from each team. The speakers change every time, so by the end of the day twelve of you will have spoken. The yes team always goes first.\n\nEach speaker has two minutes. I'll let you know when you have thirty seconds left. When your time is up, please finish your sentence and stop there.\n\nAfter the first two speeches, each team asks the other team two questions. Then you get one minute to talk in your team, and the second speakers answer one point from the other side. Before the second vote, the fact-checkers tell us whether the other team's facts were right." },
   { nazwa: "How we vote", mowisz: "We vote twice: once before the debate and once after it. You vote on your phones. Speakers don't vote. Please vote for what you really think, not for your team.\n\nHere is the important part. The winner is not the team with more votes at the end. The winner is the team that changed more minds. For example, if yes has fourteen votes before the debate and eleven after it, the no team wins, because it convinced three people." },
-  { nazwa: "Three rules", mowisz: "One. An argument is a claim plus evidence. \"We think that…\" is not enough. Give us a fact, a number or a real example.\n\nTwo. Answer the argument, not the person. You can disagree as strongly as you like, but stay respectful.\n\nThree. If you can't find a word, say it in Polish. Your teacher will help you. Nobody will correct your pronunciation during the debate.\n\nEach team also has a fact-checker. During the debate, the fact-checkers check the other team's facts on their phones, and at the end they tell us if anything didn't add up. The debates are being recorded, so please speak loudly and clearly." },
+  { nazwa: "Three rules", mowisz: "One. An argument is a claim plus evidence. \"We think that…\" is not enough. Give us a fact, a number or a real example.\n\nTwo. Answer the argument, not the person. You can disagree as strongly as you like, but stay respectful.\n\nThree. If you can't find a word, say it in Polish. Your teacher will help you. Nobody will correct your pronunciation during the debate.\n\nEach team also has a fact-checker. During the debate, the fact-checkers check the other team's facts on their phones. Before the second vote, they tell us if anything didn't add up, so getting your facts right can win or lose votes. The debates are being recorded, so please speak loudly and clearly." },
 ];
 
 const ZAKONCZENIE = [
@@ -1066,7 +1069,7 @@ function ogolnaSciaga() {
     lista(["No argument sheet: 15 min for 3 arguments in Polish, 10 min to translate with a teacher.",
       "Short of time: drop the questions and the team talk, the debate takes about 15 min.",
       "Missing word: they say it in Polish, a teacher helps. Don't correct pronunciation.",
-      "Dispute over a fact: don't settle it, leave it to the fact-checkers at the end.",
+      "Dispute over a fact: don't settle it, leave it to the fact-checkers before the second vote.",
       "Personal attack: Answer the argument, not the person."]),
     el("h3", { textContent: "After each debate" }),
     el("p", { textContent: "Stop the recording, photograph both sheets, new speakers, the teams switch sides." }),
