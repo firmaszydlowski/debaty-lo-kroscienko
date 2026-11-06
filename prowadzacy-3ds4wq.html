@@ -1207,12 +1207,14 @@ function rysujPanel(wymus = false) {
 /* Tablet prowadzącego: fazy, timer z dźwiękami, sterowanie głosowaniem. Panele boczne: prowadzacy_panele.js. */
 const KLUCZ_STANU = "debaty-prowadzacy-stan-v1";
 const KLUCZ_GLOSOW = "debaty-prowadzacy-glosy-v1";
-const KLUCZ_DZWIEKU = "debaty-prowadzacy-dzwiek-v1";
+const KLUCZ_DZWIEKU = "debaty-prowadzacy-dzwiek-v2";
 const EKRANY = ["Opening", "Debate 1", "Debate 2", "Debate 3", "Closing"];
 
 let stan = wybierzNowszy(nowyStan(), czytajLokalnie(KLUCZ_STANU, null));
 let glosy = czytajLokalnie(KLUCZ_GLOSOW, {});
-let dzwiekNaTablecie = czytajLokalnie(KLUCZ_DZWIEKU, true);
+/* Dźwięk timera gra telewizor; na tablecie tylko awaryjnie, po włączeniu. */
+let dzwiekNaTablecie = czytajLokalnie(KLUCZ_DZWIEKU, false);
+let statusTv = null;
 const obecni = {};
 let potwierdzonyRev = null;
 let poprzednioPozostalo = null;
@@ -1247,6 +1249,9 @@ function naWiadomosc(temat, dane) {
     glosy = przyjmijGlos(glosy, a, b, dane);
     zapiszLokalnie(KLUCZ_GLOSOW, glosy);
     rysujGlosowanie();
+  } else if (rodzaj === "tv") {
+    statusTv = dane;
+    rysujPasek();
   } else if (rodzaj === "obecni" && a) {
     if (dane && dane.grupa) obecni[a] = dane.grupa;
     else delete obecni[a];
@@ -1258,7 +1263,7 @@ let statusLacza = { polaczone: 0, wszystkie: 2 };
 /* Po (ponownym) połączeniu odnawiamy stan na serwerach, gdyby któryś go zgubił. Odczekujemy,
    aż przyjdzie zachowany stan z serwera, żeby nie nadpisać nowszego starszym. */
 const lacze = polaczLacze({
-  subskrypcje: ["stan", "glos/#", "obecni/#"],
+  subskrypcje: ["stan", "glos/#", "obecni/#", "tv"],
   naWiadomosc,
   naStatus: (s) => {
     const dolaczyl = s.polaczone > statusLacza.polaczone;
@@ -1276,7 +1281,8 @@ function rysujPasek() {
   wskaznik.textContent = polaczone ? `servers ${polaczone}/${wszystkie} · ${zapis}` : "offline, saved on tablet";
   const grupy = Object.values(obecni);
   const ile = (g) => grupy.filter((x) => x === g).length;
-  document.getElementById("obecni").textContent = `Phones: ${grupy.length} (G1: ${ile(1)}, G2: ${ile(2)})`;
+  const tv = !statusTv ? "TV: not connected" : statusTv.dzwiek ? "TV: sound on" : "TV: sound off, click the TV screen";
+  document.getElementById("obecni").textContent = `Phones: ${grupy.length} (G1: ${ile(1)}, G2: ${ile(2)}) · ${tv}`;
 }
 
 function rysujEkrany() {
@@ -1343,6 +1349,8 @@ function przyciskTimera(tekst, akcja, klasa = "przycisk") {
 function przyciskiDzwieku() {
   const test = el("button", { className: "przycisk", type: "button", textContent: "Test sound" });
   test.addEventListener("click", () => {
+    ustaw(zmien(stan, Date.now(), (s) => { s.testDzwieku = Date.now(); }));
+    if (!dzwiekNaTablecie) return;
     odblokujDzwieki();
     setTimeout(() => zagraj("ostrzezenie").catch((b) => console.warn(b)), 300);
     setTimeout(() => zagraj("koniec").catch((b) => console.warn(b)), 1500);
@@ -1381,7 +1389,7 @@ function rysujTimer() {
   tykniecie();
 }
 
-/* Co 200 ms: cyfry, kolor i dźwięki. Telefony pokazują sam czas, dźwięk gra tablet i (po włączeniu) telewizor. */
+/* Co 200 ms: cyfry, kolor i dźwięki. Dźwięk gra telewizor; tablet tylko, gdy go włączysz. */
 function tykniecie() {
   const t = stan.timer;
   const teraz = t.stan === "stop" ? (biezacaFaza().czas || 120) * 1000 : pozostalo(t, Date.now());
